@@ -96,3 +96,27 @@ test("正常状态但即将到期的资产仍导出，不导出备注和凭据",
   assert.equal(items[0].date, "2026-09-10");
   assert.ok(!createCalendar(items, now).includes("private password"));
 });
+
+test("号码日历以本地日期筛选30天窗口，不输出号码备注或关联信息", () => {
+  const snapshot = {
+    ...empty,
+    phoneNumbers: [
+      {
+        id: "today",
+        number: "+1 555 0100",
+        label: "续费号码",
+        expiresAt: "2026-09-30",
+        notes: "private phone note",
+        subscriptionIds: ["private-linked-ai"],
+      },
+      { id: "later", number: "+1 555 0101", expiresAt: "2026-10-31" },
+      { id: "unknown", number: "+1 555 0102", expiresAt: "" },
+    ],
+  } as Snapshot;
+  const items = calendarItems(snapshot, new Date(2026, 8, 30, 0, 30));
+  assert.equal(items.length, 1);
+  assert.equal(items[0].id, "phone:today");
+  assert.equal(items[0].date, "2026-09-30");
+  assert.ok(!JSON.stringify(items).includes("private phone note"));
+  assert.ok(!JSON.stringify(items).includes("private-linked-ai"));
+});

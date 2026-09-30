@@ -23,13 +23,14 @@ import { migrateSecretValues } from "@/lib/vault-migrate";
 import { useAppStore } from "@/lib/store";
 import type { ViewId } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { startThemeSync, startLocaleSync, useSettings } from "@/lib/settings";
+import { startThemeSync, startLocaleSync, startDisplaySync, useSettings } from "@/lib/settings";
 import { useVault } from "@/lib/vault-state";
 import { t, subscribeLocale, getLocale } from "@/lib/i18n";
 
 export function AppShell() {
   const locale = useSyncExternalStore(subscribeLocale, getLocale, () => "zh" as const);
   useEffect(() => startLocaleSync(), []);
+  useEffect(() => startDisplaySync((message) => toast(t("界面大小设置失败：{0}", message))), []);
   useEffect(() => {
     const bridge = desktop();
     if (bridge) void bridge.preferences.set({ locale }).catch((err) => toast(String(err.message)));
@@ -37,11 +38,20 @@ export function AppShell() {
   useEffect(() => {
     const bridge = desktop();
     if (!bridge) return;
-    const off = bridge.onAttention((asset) =>
+    const off = bridge.onAttention((asset) => {
+      if (asset.kind === "phone") {
+        useAppStore.getState().setExpanded(null);
+        useAppStore.getState().setView("phones");
+        return;
+      }
       useAppStore
         .getState()
-        .setExpanded({ ...asset, origin: { x: window.innerWidth / 2, y: 50, w: 100, h: 50 } }),
-    );
+        .setExpanded({
+          kind: asset.kind,
+          id: asset.id,
+          origin: { x: window.innerWidth / 2, y: 50, w: 100, h: 50 },
+        });
+    });
     const offVault = bridge.onVaultChanged(() => {
       if (useAppStore.getState().composerPreset?._captureId) useAppStore.getState().closeComposer();
       void useVault.getState().refresh();
@@ -65,6 +75,7 @@ export function AppShell() {
     view === "docs" ||
     view === "usage" ||
     view === "nodes" ||
+    view === "phones" ||
     view === "overview";
   const setCommandOpen = useAppStore((s) => s.setCommandOpen);
   const openComposer = useAppStore((s) => s.openComposer);
@@ -81,7 +92,7 @@ export function AppShell() {
     const tick = () => {
       const servers = useAppStore.getState().servers;
       for (const s of servers) {
-        if (s.status === "offline") continue;
+        if (s.status === "offline" || s.sshConfigured === false) continue;
         const prevC = useLive.getState().cpu[s.id] ?? s.cpu;
         const prevM = useLive.getState().memory[s.id] ?? s.memory;
         const cpu = clamp(prevC + (Math.random() - 0.48) * 5, 3, 98);
@@ -129,6 +140,10 @@ export function AppShell() {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "n") {
         e.preventDefault();
+        if (useAppStore.getState().view === "phones") {
+          window.dispatchEvent(new Event("nanpad:add-phone"));
+          return;
+        }
         const kind = NAV.find((n) => n.id === useAppStore.getState().view)?.kind ?? "server";
         openComposer(kind);
       }
@@ -151,7 +166,10 @@ export function AppShell() {
   }, [openComposer, setCommandOpen]);
 
   return (
-    <div data-app-ready={hydrated} className="flex h-dvh min-h-0 flex-col bg-canvas text-ink">
+    <div
+      data-app-ready={hydrated}
+      className="flex h-[var(--app-viewport-height,100dvh)] min-h-0 flex-col bg-canvas text-ink"
+    >
       <TitleBar />
       <div className="flex min-h-0 flex-1">
         <Sidebar className="hidden md:flex" />

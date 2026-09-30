@@ -1,3 +1,5 @@
+import { phoneExpiry } from "../../electron/services/phone-numbers.mjs";
+import { hasServerObservation, serverNeedsAttention } from "@/lib/server-observation.mjs";
 import {
   AlertTriangle,
   Bot,
@@ -5,6 +7,7 @@ import {
   KeyRound,
   Mail,
   Search,
+  Phone,
   Server as ServerIcon,
   Shield,
   SquareTerminal,
@@ -26,7 +29,7 @@ import type { AssetKind, Status, ViewId } from "@/lib/types";
 import { cn, daysUntil } from "@/lib/utils";
 import { t, getLocale } from "@/lib/i18n";
 
-const KIND_ICON: Record<AssetKind | "system", LucideIcon> = {
+const KIND_ICON: Record<AssetKind | "system" | "phone", LucideIcon> = {
   server: ServerIcon,
   domain: Globe,
   mail: Mail,
@@ -34,10 +37,12 @@ const KIND_ICON: Record<AssetKind | "system", LucideIcon> = {
   secret: KeyRound,
   cert: Shield,
   system: AlertTriangle,
+  phone: Phone,
 };
 
-const KIND_VIEW: Record<AssetKind, ViewId> = {
+const KIND_VIEW: Record<AssetKind | "phone", ViewId> = {
   server: "servers",
+  phone: "phones",
   domain: "domains",
   mail: "mail",
   ai: "ai",
@@ -47,7 +52,7 @@ const KIND_VIEW: Record<AssetKind, ViewId> = {
 
 interface Alert {
   id: string;
-  kind: AssetKind;
+  kind: AssetKind | "phone";
   status: Status;
   title: string;
   detail: string;
@@ -62,6 +67,7 @@ interface Alert {
  */
 export function useAlerts(): Alert[] {
   const locale = getLocale();
+  const phoneNumbers = useAppStore((s) => s.phoneNumbers);
   const servers = useAppStore((s) => s.servers);
   const domains = useAppStore((s) => s.domains);
   const mailboxes = useAppStore((s) => s.mailboxes);
@@ -71,15 +77,31 @@ export function useAlerts(): Alert[] {
 
   return useMemo(() => {
     const out: Alert[] = [
-      ...servers
-        .filter((x) => x.status !== "online")
-        .map((x) => ({
-          id: x.id,
-          kind: "server" as const,
-          status: x.status,
-          title: x.name,
-          detail: x.status === "offline" ? t("主机离线") : t("CPU {0}% · 负载偏高", x.cpu),
-        })),
+      ...phoneNumbers.flatMap((record): Alert[] => {
+        const expiry = phoneExpiry(record.expiresAt);
+        if (expiry.days === null || expiry.days > 30) return [];
+        return [
+          {
+            id: record.id,
+            kind: "phone",
+            status: expiry.days <= 0 ? "offline" : "warning",
+            title: record.label || record.number,
+            detail:
+              expiry.days < 0
+                ? t("号码已过期 {0} 天", -expiry.days)
+                : expiry.days === 0
+                  ? t("号码今天到期")
+                  : t("号码 {0} 天后到期", expiry.days),
+          },
+        ];
+      }),
+      ...servers.filter(serverNeedsAttention).map((x) => ({
+        id: x.id,
+        kind: "server" as const,
+        status: x.status,
+        title: x.name,
+        detail: x.status === "offline" ? t("主机离线") : t("CPU {0}% · 负载偏高", x.cpu),
+      })),
       ...certs
         .filter((x) => x.status !== "online")
         .map((x) => ({
@@ -127,7 +149,7 @@ export function useAlerts(): Alert[] {
         })),
     ];
     return out.sort((a, b) => rank(b.status) - rank(a.status));
-  }, [servers, domains, mailboxes, aiAssets, secrets, certs, locale]);
+  }, [servers, domains, mailboxes, aiAssets, secrets, certs, phoneNumbers, locale]);
 }
 
 function rank(s: Status) {
@@ -185,7 +207,7 @@ export function RightRail({ className }: { className?: string }) {
           ) : (
             <ul>
               {alerts.slice(0, 5).map((a) => (
-                <AlertRow key={a.id} alert={a} />
+                <AlertRow key={`${a.kind}:${a.id}`} alert={a} />
               ))}
             </ul>
           )}
@@ -257,6 +279,7 @@ function AlertRow({ alert }: { alert: Alert }) {
         onClick={(e) => {
           const r = e.currentTarget.getBoundingClientRect();
           setView(KIND_VIEW[alert.kind]);
+          if (alert.kind === "phone") return;
           setExpanded({
             kind: alert.kind,
             id: alert.id,
@@ -329,7 +352,9 @@ function QuickTerminal() {
   const servers = useAppStore((s) => s.servers);
   const openSsh = useAppStore((s) => s.openSsh);
   const cpuMap = useLive((s) => s.cpu);
-  const online = servers.filter((s) => s.status !== "offline").slice(0, 3);
+  const online = servers
+    .filter((s) => hasServerObservation(s) && s.status !== "offline")
+    .slice(0, 3);
   if (online.length === 0) return null;
 
   return (

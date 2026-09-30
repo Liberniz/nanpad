@@ -248,15 +248,17 @@
 
 @theme {
   --font-sans:
-    "IBM Plex Sans", "Source Han Sans SC", "Noto Sans SC", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    system-ui, -apple-system, "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC",
+    "Noto Sans CJK SC", sans-serif;
+  --font-mono:
+    ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, "Microsoft YaHei UI", monospace;
 
   --color-canvas: #f4f5f5;
   --color-sidebar: #ffffff;
   --color-card: #ffffff;
   --color-ink: #0f1419;
   --color-muted: #536471;
-  --color-subtle: #8b98a5;
+  --color-subtle: #63717d;
   --color-line: #eff3f4;
   --color-line-strong: #cfd9de;
   --color-banner: #faf6ea;
@@ -281,8 +283,8 @@
   --shadow-card-hover: 0 0 0 1px rgba(15, 20, 25, 0.1), 0 8px 24px -8px rgba(15, 20, 25, 0.12);
   --shadow-float: 0 0 0 1px rgba(15, 20, 25, 0.08), 0 24px 64px -16px rgba(15, 20, 25, 0.28);
 
-  --text-2xs: 0.6875rem;
-  --text-2xs--line-height: 1.3;
+  --text-2xs: 0.75rem;
+  --text-2xs--line-height: 1.4;
   --text-meta: 0.8125rem;
   --text-meta--line-height: 1.4;
   --text-body: 0.9375rem;
@@ -319,7 +321,7 @@
   --color-card: #171c21;
   --color-ink: #e6ebef;
   --color-muted: #9aa7b2;
-  --color-subtle: #6b7783;
+  --color-subtle: #8c9aa7;
   --color-line: #222930;
   --color-line-strong: #38424b;
   --color-banner: #1d1b14;
@@ -664,7 +666,7 @@
   .anim-panel[data-shown="true"] {
     opacity: 1;
     transform: none;
-    filter: blur(0);
+    filter: none;
   }
 
   /* A sheet travels from the edge it is anchored to. */
@@ -691,7 +693,7 @@
     }
     .anim-sheet[data-shown="true"] {
       transform: none;
-      filter: blur(0);
+      filter: none;
     }
   }
 
@@ -1032,8 +1034,8 @@
   }
   to {
     opacity: 1;
-    transform: translateY(0);
-    filter: blur(0);
+    transform: none;
+    filter: none;
   }
 }
 
@@ -1044,8 +1046,8 @@
   }
   to {
     opacity: 1;
-    transform: translateY(0);
-    filter: blur(0);
+    transform: none;
+    filter: none;
   }
 }
 
@@ -1316,6 +1318,7 @@ p {
   letter-spacing: 0;
 }
 .settings-dialog {
+  max-height: calc((100dvh - 24px) / var(--app-zoom, 1));
   min-width: 0;
 }
 .settings-dialog select {
@@ -1513,7 +1516,7 @@ p {
 .asset-name > small {
   margin-top: 4px;
   color: var(--color-muted);
-  font-size: 11px;
+  font-size: var(--text-2xs);
   font-weight: 400;
 }
 .asset-name:hover > span {
@@ -1590,7 +1593,7 @@ p {
   display: flex;
   gap: 6px;
   align-items: center;
-  font-size: 11px;
+  font-size: var(--text-2xs);
   color: var(--color-muted);
 }
 .asset-graph .react-flow__handle {
@@ -2165,7 +2168,7 @@ p {
 .log-time {
   color: #737373;
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: var(--text-2xs);
 }
 
 .log-event {
@@ -2618,4 +2621,11 @@ p {
     min-height: 44px;
     min-width: 44px;
   }
+}
+
+/* 既有资产标记统一遵守最小字号，避免局部任意值覆盖可读性设置。 */
+.text-\[9px\],
+.text-\[10px\],
+.text-\[11px\] {
+  font-size: var(--text-2xs);
 }

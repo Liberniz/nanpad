@@ -1,3 +1,4 @@
+import { normalizePhoneNumbers } from "./phone-numbers.mjs";
 import { hostedImageUrl } from "./hosted-image.mjs";
 export const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 export const MAX_IMAGE_BYTES = 1024 * 1024;
@@ -137,6 +138,8 @@ export function normalizeSnapshotImages(
   const wrapped = Boolean(outer.state && typeof outer.state === "object");
   const state = /** @type {Record<string, unknown>} */ (wrapped ? outer.state : outer);
   const result = { ...state };
+  if ("phoneNumbers" in state)
+    result.phoneNumbers = normalizePhoneNumbers(state.phoneNumbers, strict);
   for (const key of ["servers", "domains", "mailboxes", "aiAssets", "secrets", "certs"]) {
     if (!Array.isArray(state[key])) continue;
     result[key] = state[key].map((asset) => {

@@ -1,4 +1,4 @@
-import { X, LogIn, Pencil } from "lucide-react";
+import { X, LogIn, Pencil, ChartNoAxesCombined, ArrowLeft } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 import { AccountFields, accountFromForm } from "./account-fields";
@@ -27,6 +27,14 @@ import type {
 } from "@/lib/types";
 import { uid } from "@/lib/utils";
 import { t } from "@/lib/i18n";
+import {
+  initialAiMode,
+  initialServerMode,
+  serverAccountDraft,
+  serverAccountKey,
+  serverAssetFromDraft,
+  sshDraftForSave,
+} from "@/lib/composer-draft.mjs";
 
 export function Composer() {
   const open = useAppStore((s) => s.composerOpen);
@@ -85,14 +93,22 @@ function ComposerBody({
     ...defaults(kind, existing),
     ...preset,
   }));
-  const [aiMode, setAiMode] = useState<"login" | "manual">(editingId ? "manual" : "login");
+  const [aiMode, setAiMode] = useState<"choose" | "api" | "login" | "manual">(() =>
+    initialAiMode(existing),
+  );
+  const [serverMode, setServerMode] = useState<"record" | "ssh">(() =>
+    initialServerMode(existing, form),
+  );
   const [imageBusy, setImageBusy] = useState(false);
 
   // Reset only when the form changes *subject*. Keying on `existing` would
   // wipe half-typed input every time a background probe rewrote the record.
   useEffect(() => {
-    setForm({ ...defaults(kind, findAsset(kind, editingId, useAppStore.getState())), ...preset });
-    setAiMode(editingId ? "manual" : "login");
+    const current = findAsset(kind, editingId, useAppStore.getState());
+    const next = { ...defaults(kind, current), ...preset };
+    setForm(next);
+    setAiMode(initialAiMode(current));
+    setServerMode(initialServerMode(current, next));
     setImageBusy(false);
   }, [kind, editingId, preset]);
 
@@ -122,8 +138,9 @@ function ComposerBody({
     // Secrets go to the encrypted vault before the asset is written, so a
     // half-saved record never ends up pointing at a credential that is not there.
     if (isDesktop()) {
-      const sshCredential = kind === "server" ? credentialFromForm(form) : null;
-      const account = accountFromForm(form);
+      const sshDraft = kind === "server" ? sshDraftForSave(form, serverMode) : null;
+      const sshCredential = sshDraft ? credentialFromForm(sshDraft) : null;
+      const account = accountFromForm(kind === "server" ? serverAccountDraft(form) : form);
       if (sshCredential || account) {
         const unlocked = await useVault.getState().require(t("保存账号与凭据需要先解锁密钥库。"));
         if (!unlocked) {
@@ -144,7 +161,7 @@ function ComposerBody({
     }
 
     if (!captureStillOpen()) return;
-    persist(kind, id, form, existing);
+    persist(kind, id, form, existing, serverMode);
     if (kind === "secret" && form.kind === "password" && form._mailboxId) {
       useAppStore.getState().linkAssets({ kind, id }, { kind: "mail", id: form._mailboxId });
     }
@@ -191,7 +208,19 @@ function ComposerBody({
             <X className="size-4" />
           </Button>
         </div>
-        {kind === "ai" && (
+        {kind === "ai" && !editingId && aiMode !== "choose" && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="mb-3"
+            onClick={() => setAiMode("choose")}
+          >
+            <ArrowLeft className="size-3.5" />
+            {t("重新选择来源")}
+          </Button>
+        )}
+        {kind === "ai" && (aiMode === "login" || aiMode === "manual") && (
           <div
             role="tablist"
             aria-label={t("添加方式")}
@@ -219,7 +248,65 @@ function ComposerBody({
             </Button>
           </div>
         )}
-        {kind === "ai" && aiMode === "login" ? (
+        {kind === "ai" && aiMode === "choose" ? (
+          <div className="space-y-3">
+            <p className="text-meta text-muted">{t("先选择要管理的 AI 来源。")}</p>
+            <button
+              type="button"
+              className="flex w-full items-start gap-3 rounded-xl border border-line bg-canvas p-4 text-left transition-colors hover:bg-line focus-visible:outline-2 focus-visible:outline-accent"
+              onClick={() => setAiMode("login")}
+            >
+              <LogIn className="mt-0.5 size-5 shrink-0 text-accent" />
+              <span>
+                <span className="block font-semibold">{t("订阅账号")}</span>
+                <span className="mt-1 block text-meta text-muted">
+                  {t("连接 ChatGPT / Codex、Claude 等账号，查看平台提供的订阅额度。")}
+                </span>
+              </span>
+            </button>
+            <button
+              type="button"
+              className="flex w-full items-start gap-3 rounded-xl border border-line bg-canvas p-4 text-left transition-colors hover:bg-line focus-visible:outline-2 focus-visible:outline-accent"
+              onClick={() => setAiMode("api")}
+            >
+              <ChartNoAxesCombined className="mt-0.5 size-5 shrink-0 text-accent" />
+              <span>
+                <span className="block font-semibold">{t("API 调用用量")}</span>
+                <span className="mt-1 block text-meta text-muted">
+                  {t("连接 OpenAI 或 Anthropic 的用量接口，记录 Token 用量。")}
+                </span>
+              </span>
+            </button>
+            <Button type="button" variant="ghost" onClick={() => setAiMode("manual")}>
+              <Pencil className="size-4" />
+              {t("仅手动记录")}
+            </Button>
+          </div>
+        ) : kind === "ai" && aiMode === "api" ? (
+          <div className="space-y-4">
+            <p className="text-meta leading-relaxed text-muted">
+              {t(
+                "选择 API 服务商后继续设置用量来源。组织用量接口通常需要 Admin Key，普通调用 Key 可能没有查询权限。",
+              )}
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => useAppStore.getState().openUsageSetup({ type: "openai-api" })}
+              >
+                OpenAI API
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => useAppStore.getState().openUsageSetup({ type: "anthropic-api" })}
+              >
+                Anthropic API
+              </Button>
+            </div>
+          </div>
+        ) : kind === "ai" && aiMode === "login" ? (
           <div role="tabpanel" aria-label={t("快速登录")}>
             <AiAccountsPanel
               standalone
@@ -234,15 +321,33 @@ function ComposerBody({
           </div>
         ) : (
           <form onSubmit={submit}>
-            <div className="mb-4">
-              <ImagePicker
-                key={`${kind}:${editingId ?? "new"}`}
-                value={form.imageDataUrl}
-                onChange={(value) => set("imageDataUrl", value)}
+            {kind !== "server" && (
+              <div className="mb-4">
+                <ImagePicker
+                  key={`${kind}:${editingId ?? "new"}`}
+                  value={form.imageDataUrl}
+                  onChange={(value) => set("imageDataUrl", value)}
+                  onBusyChange={setImageBusy}
+                />
+              </div>
+            )}
+            {kind === "ai" && !form.oauthAccountId && (
+              <p className="mb-4 rounded-lg bg-canvas p-3 text-meta leading-relaxed text-muted">
+                {t("手动记录不会自动采集用量。这里的用量、月费与续费日期由你维护。")}
+              </p>
+            )}
+            {kind === "server" ? (
+              <ServerFields
+                form={form}
+                set={set}
+                editingId={editingId}
+                mode={serverMode}
+                setMode={setServerMode}
                 onBusyChange={setImageBusy}
               />
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">{fields(kind, form, set, editingId)}</div>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2">{fields(kind, form, set, editingId)}</div>
+            )}
             {kind === "secret" && form.kind === "password" && (
               <div className="mt-3">
                 <Field label={t("注册邮箱")}>
@@ -273,6 +378,139 @@ function ComposerBody({
   );
 }
 
+function ServerFields({
+  form,
+  set,
+  editingId,
+  mode,
+  setMode,
+  onBusyChange,
+}: {
+  form: Record<string, string>;
+  set: (key: string, value: string) => void;
+  editingId: string | null;
+  mode: "record" | "ssh";
+  setMode: (mode: "record" | "ssh") => void;
+  onBusyChange: (busy: boolean) => void;
+}) {
+  const field = (key: string, label: string, required = false) => (
+    <Field label={label}>
+      <Input
+        aria-label={label}
+        value={form[key] ?? ""}
+        required={required}
+        onChange={(event) => set(key, event.target.value)}
+      />
+    </Field>
+  );
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <SmartPaste
+          kind="server"
+          onApply={(values) => {
+            for (const [key, value] of Object.entries(values)) set(key, value);
+            setMode("ssh");
+          }}
+        />
+        {field("name", t("主机名"), true)}
+        {field("host", "IP / Host", true)}
+      </div>
+      <fieldset className="rounded-xl border border-line p-3">
+        <legend className="px-1 text-meta font-medium">{t("使用方式")}</legend>
+        <div className="grid grid-cols-2 gap-3 text-meta">
+          <label className="flex cursor-pointer items-center gap-2">
+            <input
+              type="radio"
+              name="server-mode"
+              value="record"
+              checked={mode === "record"}
+              onChange={() => setMode("record")}
+            />
+            {t("仅记录")}
+          </label>
+          <label className="flex cursor-pointer items-center gap-2">
+            <input
+              type="radio"
+              name="server-mode"
+              value="ssh"
+              checked={mode === "ssh"}
+              onChange={() => setMode("ssh")}
+            />
+            {t("配置 SSH")}
+          </label>
+        </div>
+        <p className="mt-2 text-meta text-muted">
+          {t(
+            mode === "record"
+              ? editingId
+                ? "仅保存资产信息，已有 SSH 凭据会保留。"
+                : "先保存名称和地址，需要连接时再配置 SSH。"
+              : "填写 SSH 连接信息，凭据加密保存。",
+          )}
+        </p>
+      </fieldset>
+      {mode === "ssh" && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label={t("SSH 端口")}>
+            <Input
+              aria-label={t("SSH 端口")}
+              type="number"
+              min={1}
+              max={65535}
+              value={form.port ?? "22"}
+              onChange={(event) => set("port", event.target.value)}
+            />
+          </Field>
+          {field("username", t("用户名"))}
+          <CredentialFields
+            serverId={editingId}
+            target={{
+              host: form.host ?? "",
+              port: form.port ?? "22",
+              username: form.username ?? "root",
+            }}
+            form={form}
+            set={set}
+          />
+        </div>
+      )}
+      <details className="rounded-xl border border-line p-3">
+        <summary className="cursor-pointer text-meta font-medium">{t("更多信息（可选）")}</summary>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <ImagePicker
+              key={`server:${editingId ?? "new"}`}
+              value={form.imageDataUrl}
+              onChange={(value) => set("imageDataUrl", value)}
+              onBusyChange={onBusyChange}
+            />
+          </div>
+          {field("label", t("备注名"))}
+          {field("os", t("系统"))}
+          {field("region", t("区域"))}
+          {field("tags", t("标签（逗号分隔）"))}
+          <div className="sm:col-span-2">
+            <Field label={t("说明")}>
+              <Textarea
+                aria-label={t("说明")}
+                value={form.notes ?? ""}
+                onChange={(event) => set("notes", event.target.value)}
+              />
+            </Field>
+          </div>
+          <AccountFields
+            assetId={editingId}
+            kind="server"
+            form={serverAccountDraft(form)}
+            set={(key, value) => set(serverAccountKey(key), value)}
+          />
+        </div>
+      </details>
+    </div>
+  );
+}
+
 function fields(
   kind: AssetKind,
   form: Record<string, string>,
@@ -287,7 +525,7 @@ function fields(
         for (const [k, v] of Object.entries(fields)) set(k, v);
       }}
     />,
-    ...kindFields(kind, form, set, editingId),
+    ...kindFields(kind, form, set),
     ...(kind === "ai" && form.oauthAccountId
       ? []
       : [<AccountFields key="_account" assetId={editingId} kind={kind} form={form} set={set} />]),
@@ -298,7 +536,6 @@ function kindFields(
   kind: AssetKind,
   form: Record<string, string>,
   set: (k: string, v: string) => void,
-  editingId: string | null,
 ): ReactNode[] {
   const F = (key: string, label: string, extra?: { span?: boolean; area?: boolean }) => (
     <div key={key} className={extra?.span ? "sm:col-span-2" : ""}>
@@ -322,28 +559,7 @@ function kindFields(
 
   switch (kind) {
     case "server":
-      return [
-        F("name", t("主机名")),
-        F("label", t("备注名")),
-        F("host", "IP / Host"),
-        F("port", t("SSH 端口")),
-        F("username", t("用户名")),
-        F("os", t("系统")),
-        F("region", t("区域"), { span: true }),
-        F("tags", t("标签（逗号分隔）"), { span: true }),
-        F("notes", t("说明"), { span: true, area: true }),
-        <CredentialFields
-          key="_credentials"
-          serverId={editingId}
-          target={{
-            host: form.host ?? "",
-            port: form.port ?? "22",
-            username: form.username ?? "root",
-          }}
-          form={form}
-          set={set}
-        />,
-      ];
+      return [];
     case "domain":
       return [
         F("name", t("域名"), { span: true }),
@@ -444,6 +660,7 @@ function defaults(kind: AssetKind, existing: unknown): Record<string, string> {
       if (Array.isArray(v)) out[k] = v.join(", ");
       else if (v != null) out[k] = String(v);
     }
+    if (kind === "server" && o.authKind) out._authKind = String(o.authKind);
     if (kind === "ai" && o.monthlyUsdKnown === false) out.monthlyUsd = "";
     return out;
   }
@@ -456,7 +673,7 @@ function defaults(kind: AssetKind, existing: unknown): Record<string, string> {
         host: "",
         port: "22",
         username: "root",
-        os: "Ubuntu 24.04 LTS",
+        os: "",
         region: "",
         tags: "",
         notes: "",
@@ -491,7 +708,13 @@ function defaults(kind: AssetKind, existing: unknown): Record<string, string> {
   }
 }
 
-function persist(kind: AssetKind, id: string, form: Record<string, string>, existing: unknown) {
+function persist(
+  kind: AssetKind,
+  id: string,
+  form: Record<string, string>,
+  existing: unknown,
+  serverMode: "record" | "ssh",
+) {
   const s = useAppStore.getState();
   const statusOf = (iso?: string) => {
     if (!iso) return "online" as const;
@@ -503,36 +726,15 @@ function persist(kind: AssetKind, id: string, form: Record<string, string>, exis
 
   switch (kind) {
     case "server": {
-      const prev = (existing as Server | null) ?? null;
-      const item: Server = {
+      const item = serverAssetFromDraft({
         id,
-        imageDataUrl: form.imageDataUrl || "",
-        name: form.name || "unnamed",
-        label: form.label || form.name,
-        host: form.host,
-        port: Number(form.port) || 22,
-        username: form.username || "root",
-        os: form.os,
-        region: form.region,
+        form,
+        existing: (existing as Server | null) ?? null,
         tags: parseTags(form.tags ?? ""),
-        status: prev?.status ?? "online",
-        cpu: prev?.cpu ?? 4,
-        memory: prev?.memory ?? 12,
-        disk: prev?.disk ?? 10,
-        uptime: prev?.uptime ?? t("刚刚"),
-        lastSeen: prev?.lastSeen ?? new Date().toISOString(),
-        notes: form.notes,
-        authKind: (form._authKind as Server["authKind"]) ?? prev?.authKind ?? "password",
-        kernel: prev?.kernel,
-        loadavg: prev?.loadavg,
-        memTotalKb: prev?.memTotalKb,
-        diskTotalKb: prev?.diskTotalKb,
-        probedAt: prev?.probedAt,
-        probeError: prev?.probeError,
-        docs: prev?.docs,
-        nodes: prev?.nodes,
-        customSecrets: prev?.customSecrets,
-      };
+        now: new Date().toISOString(),
+        pendingLabel: t("未采集"),
+        mode: serverMode,
+      });
       s.upsertServer(item);
       break;
     }

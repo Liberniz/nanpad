@@ -10,6 +10,7 @@ import type {
   Certificate,
   Domain,
   Mailbox,
+  PhoneNumber,
   Secret,
   Server,
   Snapshot,
@@ -23,6 +24,18 @@ import { subscriptionFromAccount } from "./ai-subscriptions";
 import { normalizeSnapshotImages } from "../../electron/services/image-data.mjs";
 import { normalizeMailFolders } from "./mail-folders";
 import { normalizeSecretFolders } from "./secret-folders";
+import {
+  normalizePhoneNumber,
+  normalizePhoneNumbers,
+} from "../../electron/services/phone-numbers.mjs";
+import { normalizeUsageDraft } from "./usage-setup.mjs";
+
+export interface UsageSetupDraft {
+  type?: "3x-ui" | "subscription" | "openai-api" | "anthropic-api";
+  serverId?: string;
+  nodeId?: string;
+  name?: string;
+}
 
 export interface ExpandState {
   kind: AssetKind;
@@ -37,6 +50,9 @@ export interface ExpandState {
 }
 
 export interface AppState extends Snapshot {
+  phoneNumbers: PhoneNumber[];
+  upsertPhoneNumber: (record: PhoneNumber) => void;
+  removePhoneNumber: (id: string) => void;
   links: AssetLink[];
   linkAssets: (from: AssetRef, to: AssetRef) => void;
   unlinkAssets: (from: AssetRef, to: AssetRef) => void;
@@ -56,6 +72,9 @@ export interface AppState extends Snapshot {
   composerKind: AssetKind;
   editingId: string | null;
   composerPreset: Record<string, string> | null;
+  usageSetupDraft: UsageSetupDraft | null;
+  openUsageSetup: (draft?: UsageSetupDraft) => void;
+  clearUsageSetup: () => void;
   mobileNav: boolean;
   hydrated: boolean;
 
@@ -118,6 +137,7 @@ const emptyUi = {
   composerKind: "server" as AssetKind,
   editingId: null,
   composerPreset: null,
+  usageSetupDraft: null,
   mobileNav: false,
 };
 
@@ -157,6 +177,7 @@ export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
       ...initialSnapshot(),
+      phoneNumbers: [],
       mailFolders: normalizeMailFolders(undefined),
       secretFolders: normalizeSecretFolders(undefined),
       ...emptyUi,
@@ -210,9 +231,31 @@ export const useAppStore = create<AppState>()(
           expanded: null,
         }),
       closeComposer: () => set({ composerOpen: false, editingId: null, composerPreset: null }),
+      openUsageSetup: (draft = {}) =>
+        set({
+          view: "usage",
+          usageSetupDraft: normalizeUsageDraft(draft) as UsageSetupDraft,
+          expanded: null,
+          composerOpen: false,
+          editingId: null,
+          composerPreset: null,
+          commandOpen: false,
+          mobileNav: false,
+          query: "",
+          tagFilter: [],
+        }),
+      clearUsageSetup: () => set({ usageSetupDraft: null }),
       setMobileNav: (mobileNav) => set({ mobileNav }),
       setHydrated: (hydrated) => set({ hydrated }),
 
+      upsertPhoneNumber: (record) =>
+        set({
+          phoneNumbers: normalizePhoneNumbers(
+            upsert(get().phoneNumbers, normalizePhoneNumber(record)),
+          ),
+        }),
+      removePhoneNumber: (id) =>
+        set({ phoneNumbers: get().phoneNumbers.filter((record) => record.id !== id) }),
       upsertServer: (s) =>
         set({
           servers: upsert(get().servers, s),
@@ -250,6 +293,16 @@ export const useAppStore = create<AppState>()(
               refKey(link.to) !== refKey({ kind, id }),
           ),
           expanded: null,
+          ...(kind === "ai"
+            ? {
+                phoneNumbers: get().phoneNumbers.map((record) => ({
+                  ...record,
+                  subscriptionIds: record.subscriptionIds.filter(
+                    (subscriptionId) => subscriptionId !== id,
+                  ),
+                })),
+              }
+            : {}),
         } as Partial<AppState>);
         get().log(t("已移除 {0}", removed?.name ?? removed?.address ?? removed?.cn ?? id), kind);
       },
@@ -275,6 +328,7 @@ export const useAppStore = create<AppState>()(
       resetDemo: () =>
         set({
           ...initialSnapshot(),
+          phoneNumbers: [],
           links: [],
           activity: initialActivity(),
           ...emptyUi,
@@ -284,6 +338,7 @@ export const useAppStore = create<AppState>()(
         const snap = normalizeSnapshotImages(input);
         set({
           links: normalizeLinks(snap.links, snap),
+          phoneNumbers: normalizePhoneNumbers(snap.phoneNumbers),
           servers: snap.servers ?? [],
           domains: snap.domains ?? [],
           mailboxes: snap.mailboxes ?? [],
@@ -310,6 +365,7 @@ export const useAppStore = create<AppState>()(
         return {
           ...current,
           ...saved,
+          phoneNumbers: normalizePhoneNumbers(saved.phoneNumbers, false),
           servers: withTags(saved.servers),
           domains: withTags(saved.domains),
           mailboxes: withTags(saved.mailboxes),
@@ -329,6 +385,7 @@ export const useAppStore = create<AppState>()(
         };
       },
       partialize: (s) => ({
+        phoneNumbers: s.phoneNumbers,
         links: s.links,
         servers: s.servers,
         domains: s.domains,
@@ -358,7 +415,7 @@ function upsert<T extends { id: string }>(list: T[], item: T): T[] {
 
 function collectionKey(
   kind: AssetKind,
-): Exclude<keyof Snapshot, "links" | "mailFolders" | "secretFolders"> {
+): Exclude<keyof Snapshot, "links" | "mailFolders" | "secretFolders" | "phoneNumbers"> {
   switch (kind) {
     case "server":
       return "servers";
@@ -377,6 +434,7 @@ function collectionKey(
 
 export function snapshotOf(s: Snapshot): Snapshot {
   return {
+    phoneNumbers: s.phoneNumbers ?? [],
     links: s.links ?? [],
     servers: s.servers,
     domains: s.domains,

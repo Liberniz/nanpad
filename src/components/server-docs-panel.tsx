@@ -1,8 +1,11 @@
-import { BookOpen, Check, Copy, Download, Eye, FileCode, FileText, Save, Sparkles } from "lucide-react";
-import { useEffect, useState } from "react";
+import { BookOpen, Copy, Download, Sparkles } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { Markdown } from "./markdown";
+import { AssetDocuments } from "./asset-documents";
 import { Button } from "./ui/button";
+import { useDocuments } from "@/lib/documents";
+import { rawMarkdownContent } from "@/lib/document-migration.mjs";
 import { useAppStore } from "@/lib/store";
 import type { Server } from "@/lib/types";
 import { t } from "@/lib/i18n";
@@ -151,199 +154,124 @@ apt install fail2ban -y && systemctl enable --now fail2ban
 ];
 
 export function ServerDocsPanel({ server }: { server: Server }) {
-  const upsertServer = useAppStore((s) => s.upsertServer);
-  const [docContent, setDocContent] = useState(server.docs || "");
-  const [mode, setMode] = useState<"preview" | "edit">(server.docs ? "preview" : "edit");
-  const [hasUnsaved, setHasUnsaved] = useState(false);
-
-  useEffect(() => {
-    setDocContent(server.docs || "");
-    setHasUnsaved(false);
-  }, [server.id, server.docs]);
-
-  function handleChange(val: string) {
-    setDocContent(val);
-    setHasUnsaved(val !== (server.docs || ""));
-  }
-
-  function handleSave() {
-    upsertServer({
-      ...server,
-      docs: docContent,
-    });
-    setHasUnsaved(false);
-    toast.success(t("文档已保存"));
-  }
-
-  function applyTemplate(templateContent: string) {
-    if (docContent.trim() && !window.confirm(t("当前文档非空，应用模板将覆盖现有内容，确定继续吗？"))) {
-      return;
-    }
-    const updated = templateContent;
-    setDocContent(updated);
-    upsertServer({
-      ...server,
-      docs: updated,
-    });
-    setHasUnsaved(false);
-    setMode("preview");
-    toast.success(t("已应用运维文档模板"));
-  }
-
-  async function handleCopyDoc() {
-    if (!docContent.trim()) {
-      toast(t("文档内容为空"));
-      return;
-    }
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const original = server.docs ?? "";
+  async function enter(template?: (typeof DOCS_TEMPLATES)[number]) {
+    if (busy) return;
+    setBusy(true);
+    setError("");
     try {
-      await navigator.clipboard.writeText(docContent);
-      toast.success(t("已复制全文 Markdown 内容"));
-    } catch {
-      toast.error(t("复制失败"));
+      if (template)
+        await useDocuments.getState().create([{ kind: "server", id: server.id }], {
+          title: server.name + " · " + t(template.label),
+          content: rawMarkdownContent(template.content(server)),
+        });
+      else await useDocuments.getState().importServer(server);
+      useAppStore.getState().setExpanded(null);
+      useAppStore.getState().setView("docs");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
     }
   }
-
-  function handleExportDoc() {
-    if (!docContent.trim()) {
-      toast(t("文档内容为空"));
-      return;
-    }
-    const blob = new Blob([docContent], { type: "text/markdown;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${server.name || "server"}-runbook.md`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+  function exportOriginal() {
+    const url = URL.createObjectURL(new Blob([original], { type: "text/markdown;charset=utf-8" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${server.name || "server"}-runbook.md`;
+    anchor.click();
     URL.revokeObjectURL(url);
-    toast.success(t("已导出 Markdown 文件: {0}", a.download));
   }
-
   return (
-    <div className="space-y-3 p-4">
-      {/* Top Header */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line/50 pb-3">
-        <div>
-          <h3 className="flex items-center gap-2 text-sm font-semibold tracking-tight text-ink">
-            <BookOpen className="size-4 text-sky-400" />
-            {t("服务器文档 & Runbook")}
-            {hasUnsaved && (
-              <span className="size-2 rounded-full bg-amber-400 animate-ping" title={t("存在未保存更改")} />
-            )}
-          </h3>
-          <p className="text-xs text-muted mt-0.5">
-            {t("记录该主机的安装备忘、服务配置、部署脚本及运维文档（支持 Markdown 渲染）")}
-          </p>
-        </div>
-
-        <div className="flex items-center gap-1.5">
-          {/* Mode Switch */}
-          <div className="flex rounded-lg border border-line bg-surface-subtle p-0.5 mr-1">
-            <button
-              type="button"
-              onClick={() => setMode("edit")}
-              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                mode === "edit"
-                  ? "bg-card text-ink shadow-xs"
-                  : "text-muted hover:text-ink"
-              }`}
-            >
-              <FileCode className="size-3.5" />
-              {t("编辑")}
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode("preview")}
-              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                mode === "preview"
-                  ? "bg-card text-ink shadow-xs"
-                  : "text-muted hover:text-ink"
-              }`}
-            >
-              <Eye className="size-3.5" />
-              {t("预览")}
-            </button>
-          </div>
-
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={handleCopyDoc}
-            title={t("复制全文 Markdown")}
-            className="size-7"
-          >
-            <Copy className="size-3.5" />
-          </Button>
-
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={handleExportDoc}
-            title={t("导出 Markdown 文件")}
-            className="size-7"
-          >
-            <Download className="size-3.5" />
-          </Button>
-
-          <Button
-            variant={hasUnsaved ? "primary" : "outline"}
-            size="sm"
-            onClick={handleSave}
-            className="btn-pill h-7 text-xs px-3 ml-1"
-          >
-            <Save className="mr-1 size-3.5" />
-            {hasUnsaved ? t("保存更改") : t("已保存")}
-          </Button>
-        </div>
+    <div className="space-y-3">
+      <div className="px-4 pt-4">
+        <h3 className="flex items-center gap-2 text-sm font-semibold">
+          <BookOpen className="size-4" />
+          {t("服务文档")}
+        </h3>
+        <p className="mt-2 text-sm text-muted">
+          {t("统一使用图文文档，编辑自动保存；可插入图片、链接，也可随时解除关联。")}
+        </p>
       </div>
-
-      {/* Templates Selector Pill Bar */}
-      <div className="flex flex-wrap items-center gap-1.5 pb-1">
-        <span className="text-[11px] text-muted flex items-center gap-1 mr-1">
-          <Sparkles className="size-3 text-amber-400" />
-          {t("常用模版")}:
-        </span>
-        {DOCS_TEMPLATES.map((tpl) => (
-          <button
-            key={tpl.label}
-            type="button"
-            onClick={() => applyTemplate(tpl.content(server))}
-            className="inline-flex items-center gap-1 rounded-full border border-line bg-surface-subtle px-2.5 py-0.5 text-[11px] text-muted hover:text-ink hover:border-line-focus hover:bg-line/40 transition-colors"
-          >
-            <span>{tpl.icon}</span>
-            <span>{t(tpl.label)}</span>
-          </button>
-        ))}
-      </div>
-
-      {/* Content Area */}
-      {mode === "edit" ? (
-        <div className="relative rounded-xl border border-line bg-canvas overflow-hidden focus-within:border-line-focus transition-colors">
-          <textarea
-            value={docContent}
-            onChange={(e) => handleChange(e.target.value)}
-            placeholder={t("在此处编写服务器专属 Markdown 文档、运维命令、配置文件等...")}
-            rows={14}
-            className="w-full resize-y bg-transparent p-3.5 font-mono text-xs text-ink outline-none leading-relaxed placeholder:text-muted/60"
-          />
-          <div className="border-t border-line/60 bg-surface-subtle/50 px-3 py-1.5 flex justify-between items-center text-[11px] text-muted font-mono">
-            <span>{t("{0} 字符", docContent.length)}</span>
-            <span>Markdown GFM Supported</span>
-          </div>
-        </div>
-      ) : (
-        <div className="rounded-xl border border-line bg-card p-4 min-h-[280px] max-h-[460px] overflow-y-auto">
-          {docContent.trim() ? (
-            <Markdown>{docContent}</Markdown>
-          ) : (
-            <div className="py-12 text-center text-muted">
-              <FileText className="mx-auto size-8 opacity-40 mb-2" />
-              <p className="text-xs">{t("暂未撰写文档，可切换到“编辑”模式或点击上方模版快速开始")}</p>
-            </div>
-          )}
-        </div>
+      <AssetDocuments asset={{ kind: "server", id: server.id }} />
+      {error && (
+        <p role="alert" className="mx-4 break-words text-sm text-crit">
+          {t("迁移或创建失败，旧文档仍保留：")}
+          {error}
+        </p>
       )}
+      {original.trim() && (
+        <section className="mx-4 rounded-xl border border-line p-4">
+          <h4 className="text-sm font-semibold">{t("旧版 Markdown 文档")}</h4>
+          <p className="mt-2 text-sm leading-relaxed text-muted">
+            {t(
+              "旧记录只读保留。迁移会将完整 Markdown 原文保存为代码块，不自动转换格式；重复迁移只打开已有文档，不覆盖后续编辑。",
+            )}
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button type="button" size="sm" disabled={busy} onClick={() => void enter()}>
+              {busy ? t("正在处理…") : t("迁移并编辑旧文档")}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                void navigator.clipboard
+                  .writeText(original)
+                  .then(() => toast.success(t("已复制全文 Markdown 内容")))
+                  .catch(() => toast.error(t("复制失败")));
+              }}
+            >
+              <Copy />
+              {t("复制原文")}
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={exportOriginal}>
+              <Download />
+              {t("导出 Markdown 文件")}
+            </Button>
+          </div>
+          <details className="mt-3">
+            <summary className="cursor-pointer text-sm text-muted">{t("查看保留的旧文档")}</summary>
+            <div className="mt-3 max-h-80 overflow-auto rounded-lg border border-line p-3">
+              <Markdown>{original}</Markdown>
+            </div>
+            <details className="mt-3">
+              <summary className="cursor-pointer text-sm text-muted">
+                {t("查看 Markdown 原文")}
+              </summary>
+              <pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-words text-xs">
+                {original}
+              </pre>
+            </details>
+          </details>
+        </section>
+      )}
+      <details className="mx-4 pb-4">
+        <summary className="flex cursor-pointer items-center gap-2 text-sm text-muted">
+          <Sparkles className="size-4" />
+          {t("从运维模板创建新文档")}
+        </summary>
+        <p className="mt-2 text-xs text-muted">
+          {t("模板以 Markdown 代码块保存，不覆盖已有文档。")}
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {DOCS_TEMPLATES.map((template) => (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              key={template.label}
+              disabled={busy}
+              onClick={() => void enter(template)}
+            >
+              {t(template.label)}
+            </Button>
+          ))}
+        </div>
+      </details>
     </div>
   );
 }

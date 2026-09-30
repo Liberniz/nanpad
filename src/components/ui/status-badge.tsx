@@ -6,16 +6,35 @@ import { cn } from "@/lib/utils";
 export function StatusBadge({
   status,
   sonar = true,
+  pending = false,
   className,
 }: {
   status: Status;
   sonar?: boolean;
+  pending?: boolean;
   className?: string;
 }) {
+  if (pending)
+    return (
+      <span
+        className={cn(
+          "chip inline-flex items-center gap-1.5 border border-line bg-surface text-muted",
+          className,
+        )}
+        data-status="pending"
+      >
+        <span className="size-1.5 rounded-full bg-muted" />
+        <span>{t("未采集")}</span>
+      </span>
+    );
   return (
     <span
       key={status}
-      className={cn(chipClass(status), "status-feedback inline-flex items-center gap-1.5", className)}
+      className={cn(
+        chipClass(status),
+        "status-feedback inline-flex items-center gap-1.5",
+        className,
+      )}
       data-status={status}
     >
       {sonar ? (
@@ -42,4 +61,3 @@ export function StatusBadge({
     </span>
   );
 }
-

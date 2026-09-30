@@ -1,5 +1,6 @@
 import {
   FileText,
+  Phone,
   ChartNoAxesCombined,
   Bot,
   Globe,
@@ -20,7 +21,7 @@ import { useEffect, useMemo, useRef, useState, type HTMLAttributes } from "react
 import { useShallow } from "zustand/react/shallow";
 import { isDesktop } from "@/lib/desktop";
 import { usePresence } from "@/lib/motion";
-import { useAppStore } from "@/lib/store";
+import { useAppStore, snapshotOf } from "@/lib/store";
 import { attentionOf } from "@/lib/status";
 import type { AssetKind, ViewId } from "@/lib/types";
 import { cn, downloadJson } from "@/lib/utils";
@@ -84,6 +85,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     title: "智能与通信",
     items: [
+      { id: "phones", label: "号码管理", icon: Phone },
       { id: "ai", label: "AI 订阅", icon: Bot, badgeKey: "ai", kind: "ai", countKey: "aiAssets" },
       {
         id: "mail",
@@ -324,15 +326,7 @@ function ProfileMenu() {
           </div>
           {item(t("导出 JSON 快照"), () => {
             const s = useAppStore.getState();
-            downloadJson("nanpad-assets.json", {
-              links: s.links,
-              servers: s.servers,
-              domains: s.domains,
-              mailboxes: s.mailboxes,
-              aiAssets: s.aiAssets,
-              secrets: s.secrets,
-              certs: s.certs,
-            });
+            downloadJson("nanpad-assets.json", snapshotOf(s));
             log(t("已导出资产快照"));
           })}
           {item(t("导入 JSON 快照"), () => {

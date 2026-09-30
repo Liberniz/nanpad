@@ -1,3 +1,12 @@
+import { desktop } from "./desktop";
+import {
+  readZoomPercent,
+  validateZoomPercent,
+  zoomCommandForKey,
+  stepZoomPercent,
+  type ZoomPercent,
+} from "../../electron/services/display.mjs";
+export { ZOOM_PERCENTS, type ZoomPercent } from "../../electron/services/display.mjs";
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { resolveLocale, setLocale, type LocaleChoice } from "./i18n";
@@ -6,6 +15,9 @@ export type ThemeChoice = "system" | "light" | "dark";
 export type ResolvedTheme = "light" | "dark";
 
 interface SettingsState {
+  zoomPercent: ZoomPercent;
+  zoomReady: boolean;
+  setZoomPercent: (value: ZoomPercent) => Promise<void>;
   assetLayout: "cards" | "table" | "graph";
   setAssetLayout: (layout: "cards" | "table" | "graph") => void;
   language: LocaleChoice;
@@ -38,6 +50,18 @@ export function resolveTheme(choice: ThemeChoice): ResolvedTheme {
 export const useSettings = create<SettingsState>()(
   persist(
     (set) => ({
+      zoomPercent: 100,
+      zoomReady: false,
+      setZoomPercent: async (value) => {
+        const zoomPercent = validateZoomPercent(value);
+        const bridge = desktop();
+        if (bridge) {
+          const state = await bridge.display.set(zoomPercent);
+          set({ zoomPercent: state.zoomPercent });
+        } else {
+          set({ zoomPercent });
+        }
+      },
       assetLayout: "cards",
       setAssetLayout: (assetLayout) => set({ assetLayout }),
       language: "system",
@@ -58,7 +82,21 @@ export const useSettings = create<SettingsState>()(
           : window.localStorage,
       ),
       partialize: (s) =>
-        ({ theme: s.theme, language: s.language, assetLayout: s.assetLayout }) as SettingsState,
+        ({
+          theme: s.theme,
+          language: s.language,
+          assetLayout: s.assetLayout,
+          zoomPercent: s.zoomPercent,
+        }) as SettingsState,
+      merge: (persisted, current) => {
+        const saved = persisted as Partial<SettingsState> | undefined;
+        return {
+          ...current,
+          ...saved,
+          zoomPercent: readZoomPercent(saved?.zoomPercent),
+          zoomReady: false,
+        };
+      },
       onRehydrateStorage: () => (state) => {
         state?.setResolved(resolveTheme(state.theme));
       },
@@ -109,5 +147,69 @@ export function startLocaleSync(): () => void {
   return () => {
     unsubscribe();
     window.removeEventListener("languagechange", apply);
+  };
+}
+
+/** 桌面以主进程偏好为准；网页预览采用布局缩放，避免 transform 栅格拉伸。 */
+export function startDisplaySync(onError: (message: string) => void): () => void {
+  const bridge = desktop();
+  if (bridge) {
+    let disposed = false;
+    let changed = false;
+    const off = bridge.display.onChanged((state) => {
+      changed = true;
+      useSettings.setState({ zoomPercent: readZoomPercent(state.zoomPercent), zoomReady: true });
+    });
+    const offError = bridge.display.onError((event) => onError(event.message));
+    void bridge.display
+      .get()
+      .then((state) => {
+        if (!disposed && !changed)
+          useSettings.setState({
+            zoomPercent: readZoomPercent(state.zoomPercent),
+            zoomReady: true,
+          });
+      })
+      .catch((error: unknown) => {
+        if (!disposed) {
+          useSettings.setState({ zoomReady: true });
+          onError(error instanceof Error ? error.message : String(error));
+        }
+      });
+    return () => {
+      disposed = true;
+      off();
+      offError();
+    };
+  }
+  const apply = () => {
+    const factor = useSettings.getState().zoomPercent / 100;
+    document.documentElement.style.zoom = String(factor);
+    document.documentElement.style.setProperty("--app-zoom", String(factor));
+    document.documentElement.style.setProperty("--app-viewport-height", `calc(100dvh / ${factor})`);
+  };
+  apply();
+  useSettings.setState({ zoomReady: true });
+  const off = useSettings.subscribe(apply);
+  const onKey = (event: KeyboardEvent) => {
+    const command = zoomCommandForKey({
+      key: event.key,
+      control: event.ctrlKey,
+      meta: event.metaKey,
+      alt: event.altKey,
+    });
+    if (!command) return;
+    event.preventDefault();
+    void useSettings
+      .getState()
+      .setZoomPercent(stepZoomPercent(useSettings.getState().zoomPercent, command));
+  };
+  window.addEventListener("keydown", onKey);
+  return () => {
+    off();
+    window.removeEventListener("keydown", onKey);
+    document.documentElement.style.removeProperty("zoom");
+    document.documentElement.style.removeProperty("--app-zoom");
+    document.documentElement.style.removeProperty("--app-viewport-height");
   };
 }

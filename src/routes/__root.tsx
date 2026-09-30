@@ -14,8 +14,7 @@ export const Route = createRootRoute({
       { name: "theme-color", content: "#0f1419" },
       {
         name: "description",
-        content:
-          "司南 — 个人数字资产指挥台。服务器、域名、邮箱、AI 订阅、密钥与证书，一屏尽览。",
+        content: "司南 — 个人数字资产指挥台。服务器、域名、邮箱、AI 订阅、密钥与证书，一屏尽览。",
       },
     ],
     links: [
@@ -23,19 +22,6 @@ export const Route = createRootRoute({
       { rel: "stylesheet", href: appCss },
       { rel: "manifest", href: "/__grok/manifest.webmanifest" },
       { rel: "apple-touch-icon", href: "/__grok/icon-180.png" },
-      {
-        rel: "preconnect",
-        href: "https://fonts.googleapis.com",
-      },
-      {
-        rel: "preconnect",
-        href: "https://fonts.gstatic.com",
-        crossOrigin: "anonymous",
-      },
-      {
-        rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap",
-      },
     ],
   }),
   component: () => (

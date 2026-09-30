@@ -3,7 +3,9 @@ import { CloudUpload, Settings2 } from "lucide-react";
 import { desktop } from "@/lib/desktop";
 import { type ImageBedStatus } from "@/lib/image-bed";
 import { Button } from "./ui/button";
-export function ImageBedSettings() {
+export function ImageBedSettings({
+  onStatusChange,
+}: { onStatusChange?: (status: ImageBedStatus) => void } = {}) {
   const [status, setStatus] = useState<ImageBedStatus | null>(null);
   const [open, setOpen] = useState(false);
   const [key, setKey] = useState("");
@@ -15,10 +17,11 @@ export function ImageBedSettings() {
       ?.images?.status()
       .then((s) => {
         setStatus(s);
+        onStatusChange?.(s);
         setEnabled(s.enabled || !s.configured);
       })
       .catch(() => setError("图床配置读取失败"));
-  }, []);
+  }, [onStatusChange]);
   if (!desktop()) return <span className="text-xs text-muted">网页预览：图片保存在本机</span>;
   return (
     <div className="text-sm">
@@ -67,6 +70,7 @@ export function ImageBedSettings() {
                   enabled,
                 });
                 setStatus(result);
+                onStatusChange?.(result);
                 setKey("");
                 setOpen(false);
               } catch (e) {

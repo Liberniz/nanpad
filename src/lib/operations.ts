@@ -1,3 +1,5 @@
+import { phoneExpiry } from "../../electron/services/phone-numbers.mjs";
+import { serverNeedsAttention } from "./server-observation.mjs";
 import type { AssetKind, Snapshot } from "./types.ts";
 import { t } from "./i18n.ts";
 import { parseTags } from "./tags.ts";
@@ -95,8 +97,19 @@ export function calendarItems(s: Snapshot, now = new Date()): CalendarItem[] {
     if (!Number.isFinite(Date.parse(date))) return;
     out.push({ id: `${kind}:${id}`, date: date.slice(0, 10), title, detail });
   };
+  for (const record of s.phoneNumbers ?? []) {
+    const expiry = phoneExpiry(record.expiresAt, now);
+    if (expiry.days !== null && expiry.days <= 30)
+      add(
+        "phone",
+        record.id,
+        record.label || record.number,
+        record.expiresAt,
+        t("号码到期，请确认续费与关联订阅"),
+      );
+  }
   for (const x of s.servers)
-    if (x.status !== "online") add("server", x.id, x.name, today, t("主机异常"));
+    if (serverNeedsAttention(x)) add("server", x.id, x.name, today, t("主机异常"));
   for (const x of s.mailboxes)
     if (x.status !== "online") add("mail", x.id, x.address, today, t("投递异常"));
   for (const x of s.secrets)

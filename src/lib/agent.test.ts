@@ -12,11 +12,21 @@ test("英文示例可识别密码、用量、支出和到期意图", () => {
     const password = ask("What is the password for my 163 mailbox", SNAPSHOT);
     assert.ok(password.needsVault);
     assert.ok(password.blocks.some((b) => b.type === "secret" && b.assetId === "mail1"));
-    assert.ok(ask("What expires this month", SNAPSHOT).blocks.some((b) => b.type === "rows" && b.rows.length === 2));
-    assert.ok(ask("Which subscription has the highest usage", SNAPSHOT).blocks.some((b) => b.type === "rows"));
+    assert.ok(
+      ask("What expires this month", SNAPSHOT).blocks.some(
+        (b) => b.type === "rows" && b.rows.length === 2,
+      ),
+    );
+    assert.ok(
+      ask("Which subscription has the highest usage", SNAPSHOT).blocks.some(
+        (b) => b.type === "rows",
+      ),
+    );
     assert.match(firstText(ask("How much does AI cost per month", SNAPSHOT).blocks), /20/);
     assert.ok(!/[\u4e00-\u9fff]/.test(firstText(ask("What needs attention", SNAPSHOT).blocks)));
-  } finally { setLocale("zh"); }
+  } finally {
+    setLocale("zh");
+  }
 });
 
 const SNAPSHOT: Snapshot = {
@@ -161,4 +171,26 @@ test("an empty question is not an error", () => {
   const { blocks, needsVault } = ask("   ", SNAPSHOT);
   assert.equal(needsVault, false);
   assert.equal(types(blocks).length, 1);
+});
+
+test("按名称询问未采集主机不返回占位零指标，首次失败保留错误", () => {
+  const pending: Snapshot = {
+    ...SNAPSHOT,
+    servers: [
+      {
+        ...SNAPSHOT.servers[0],
+        cpu: 0,
+        memory: 0,
+        disk: 0,
+        lastSeen: "",
+        uptime: "未采集",
+        sshConfigured: false,
+      },
+    ],
+  };
+  const text = firstText(ask("腾讯云 现在 CPU 多少", pending).blocks);
+  assert.match(text, /未采集/);
+  assert.doesNotMatch(text, /CPU 0%/);
+  pending.servers[0].probeError = "SSH authentication failed";
+  assert.match(firstText(ask("腾讯云 现在 CPU 多少", pending).blocks), /SSH authentication failed/);
 });

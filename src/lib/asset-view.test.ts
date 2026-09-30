@@ -1,3 +1,5 @@
+import { attentionOf, healthScore } from "./status.ts";
+import type { AppState } from "./store.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { assetRows, filterAssetRows, assetGraph } from "./asset-view.ts";
@@ -88,4 +90,36 @@ test("关系图只连接可见的已保存关联，节点 ID 和位置不冲突"
   const vertical = assetGraph(rows, snapshot.links, true);
   assert.equal(vertical.nodes[0].position.x, vertical.nodes[1].position.x);
   assert.notEqual(vertical.nodes[0].position.y, vertical.nodes[1].position.y);
+});
+
+test("未采集主机在表格保留为资产，不虚构指标且不进入异常筛选", () => {
+  const pending: Snapshot = {
+    ...snapshot,
+    servers: [{ ...snapshot.servers[0], status: "warning", lastSeen: "", probedAt: undefined }],
+  };
+  const rows = assetRows(pending);
+  const server = rows.find((row) => row.kind === "server");
+  assert.ok(server);
+  assert.equal(server.pending, true);
+  assert.equal(server.cpu, undefined);
+  assert.equal(server.memory, undefined);
+  assert.equal(filterAssetRows(rows, "servers", "", false, []).length, 1);
+  assert.equal(filterAssetRows(rows, "servers", "", true, []).length, 0);
+});
+
+test("号码30天到期计入待处理，但不扭曲其它资产健康分", () => {
+  const now = new Date(2026, 8, 30, 0, 30);
+  const state = {
+    ...snapshot,
+    phoneNumbers: [
+      { id: "due", expiresAt: "2026-10-30" },
+      { id: "past", expiresAt: "2026-09-29" },
+      { id: "later", expiresAt: "2026-10-31" },
+      { id: "unknown", expiresAt: "" },
+    ],
+  } as AppState;
+  const count = attentionOf(state, now);
+  assert.equal(count.phones, 2);
+  assert.equal(count.total, 3);
+  assert.equal(healthScore(state), healthScore({ ...state, phoneNumbers: [] }));
 });

@@ -1,3 +1,4 @@
+import { hasServerMetrics, hasServerObservation } from "./server-observation.mjs";
 import type { AssetKind, Snapshot, Status, ViewId } from "./types.ts";
 import { refKey, type AssetRef } from "./operations.ts";
 
@@ -6,6 +7,7 @@ export interface AssetRow extends AssetRef {
   detail: string;
   tags: string[];
   status: Status;
+  pending?: boolean;
   expires?: string;
   cpu?: number;
   memory?: number;
@@ -43,8 +45,9 @@ export function assetRows(s: Snapshot): AssetRow[] {
   return [
     ...s.servers.map((x) =>
       row("server", x, x.name, `${x.username}@${x.host}:${x.port}`, {
-        cpu: x.cpu,
-        memory: x.memory,
+        pending: !hasServerObservation(x),
+        cpu: hasServerMetrics(x) ? x.cpu : undefined,
+        memory: hasServerMetrics(x) ? x.memory : undefined,
         search:
           `${x.name} ${x.host} ${x.username} ${x.label} ${x.os} ${x.region} ${x.tags.join(" ")}`.toLocaleLowerCase(),
       }),
@@ -81,7 +84,7 @@ export function filterAssetRows(
   return rows.filter(
     (row) =>
       (!kind || kind === row.kind) &&
-      (!attention || row.status !== "online") &&
+      (!attention || (!row.pending && row.status !== "online")) &&
       tags.every((tag) => row.tags.includes(tag)) &&
       (!text || row.search.includes(text)),
   );

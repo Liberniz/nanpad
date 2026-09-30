@@ -1,3 +1,9 @@
+import {
+  createDisplayController,
+  initialWindowBounds,
+  readZoomPercent,
+  zoomCommandForKey,
+} from "./services/display.mjs";
 import { windowsAppId, migrateLegacyWindowsShortcut } from "./services/windows-identity.mjs";
 import { ImageBed } from "./services/image-bed.mjs";
 import { checkNode } from "./services/node-check.mjs";
@@ -15,6 +21,7 @@ import {
   nativeImage,
   Notification,
   safeStorage,
+  screen,
 } from "electron";
 import { X509Certificate } from "node:crypto";
 import { CaptureQueue } from "./services/browser-capture.mjs";
@@ -88,7 +95,7 @@ let quitting = false;
 let notificationTimer;
 let mailPushTimer;
 let currentSnapshot = {};
-let preferences = { closeToTray: true, notifications: true, locale: "zh" };
+let preferences = { closeToTray: true, notifications: true, locale: "zh", zoomPercent: 100 };
 const tracker = new NotificationTracker();
 const writes = new Map();
 const captures = new CaptureQueue();
@@ -104,6 +111,33 @@ app.on("open-url", (event, url) => {
   showWindow();
 });
 let preferenceWrites = Promise.resolve();
+const displayController = createDisplayController({
+  read: () => preferences.zoomPercent,
+  save: (zoomPercent) => savePreferences({ zoomPercent }),
+  apply: (zoomPercent) => {
+    if (win && !win.isDestroyed()) win.webContents.setZoomFactor(zoomPercent / 100);
+  },
+  publish: (state) => emit("display:changed", state),
+});
+
+function stepDisplayZoom(command) {
+  void displayController.step(command).catch((error) => {
+    emit("display:error", { message: String(error.message) });
+  });
+}
+
+function savePreferences(patch) {
+  const task = preferenceWrites.then(async () => {
+    const next = { ...preferences, ...patch };
+    await writeJson(join(app.getPath("userData"), "preferences.json"), next);
+    preferences = next;
+    updateTray();
+    Menu.setApplicationMenu(buildMenu());
+    return preferences;
+  });
+  preferenceWrites = task.catch(() => {});
+  return task;
+}
 
 function stopPrivateTasks() {
   extensionBridge?.revoke();
@@ -215,10 +249,7 @@ function writeJson(file, value) {
 
 async function createWindow() {
   win = new BrowserWindow({
-    width: 1480,
-    height: 940,
-    minWidth: 1040,
-    minHeight: 680,
+    ...initialWindowBounds(screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea),
     show: false,
     backgroundColor: "#0e1114",
     // 窗口和托盘使用 PNG；ICO 用于 Windows 可执行文件及安装快捷方式。
@@ -243,6 +274,7 @@ async function createWindow() {
       sandbox: true,
       spellcheck: false,
       backgroundThrottling: true,
+      zoomFactor: preferences.zoomPercent / 100,
     },
   });
 
@@ -259,6 +291,19 @@ async function createWindow() {
       relaunchDisplayName: "司南 Nanpad",
     });
   }
+
+  // 菜单、键盘与触控板共用设置档位，系统 DPI 继续由 Electron 处理。
+  win.webContents.on("before-input-event", (event, input) => {
+    if (input.type !== "keyDown") return;
+    const command = zoomCommandForKey(input);
+    if (!command) return;
+    event.preventDefault();
+    stepDisplayZoom(command);
+  });
+  win.webContents.on("zoom-changed", (_event, direction) => stepDisplayZoom(direction));
+  win.webContents.on("did-finish-load", () => {
+    win?.webContents.setZoomFactor(preferences.zoomPercent / 100);
+  });
 
   win.once("ready-to-show", () => {
     if (!process.env.NANPAD_TEST_DATA_DIR) win?.show();
@@ -327,9 +372,17 @@ function sameOrigin(a, b) {
 }
 
 /** Wrap a handler so the renderer always gets `{ok}` or `{ok:false, error}`. */
-function handle(channel, fn) {
-  ipcMain.handle(channel, async (_event, ...args) => {
+function handle(channel, fn, mainWindowOnly = false) {
+  ipcMain.handle(channel, async (event, ...args) => {
     try {
+      if (
+        mainWindowOnly &&
+        (!win ||
+          event.sender !== win.webContents ||
+          event.senderFrame !== win.webContents.mainFrame)
+      ) {
+        throw new Error("Display settings are only available to the main window.");
+      }
       return { ok: true, data: await fn(...args) };
     } catch (err) {
       return { ok: false, error: String(err?.message ?? err) };
@@ -640,25 +693,19 @@ function registerIpc() {
     currentSnapshot = next;
     return next;
   });
+  handle("display:get", () => displayController.get(), true);
+  handle("display:set", (value) => displayController.set(value), true);
   handle("preferences:get", () => ({
     ...preferences,
     notificationSupported: Notification.isSupported(),
     trayAvailable: Boolean(tray),
   }));
   handle("preferences:set", (patch) => {
-    const task = preferenceWrites.then(async () => {
-      const next = { ...preferences };
-      if (typeof patch?.closeToTray === "boolean") next.closeToTray = patch.closeToTray;
-      if (typeof patch?.notifications === "boolean") next.notifications = patch.notifications;
-      if (patch?.locale === "zh" || patch?.locale === "en") next.locale = patch.locale;
-      await writeJson(join(app.getPath("userData"), "preferences.json"), next);
-      preferences = next;
-      updateTray();
-      Menu.setApplicationMenu(buildMenu());
-      return preferences;
-    });
-    preferenceWrites = task.catch(() => {});
-    return task;
+    const safe = {};
+    if (typeof patch?.closeToTray === "boolean") safe.closeToTray = patch.closeToTray;
+    if (typeof patch?.notifications === "boolean") safe.notifications = patch.notifications;
+    if (patch?.locale === "zh" || patch?.locale === "en") safe.locale = patch.locale;
+    return savePreferences(safe);
   });
   handle("metrics:list", (id, since) => metrics.list(id, Number.isFinite(since) ? since : 0));
   handle("sftp:list", async (id, path) =>
@@ -968,6 +1015,7 @@ if (!app.requestSingleInstanceLock()) {
       for (const key of ["closeToTray", "notifications"])
         if (typeof saved[key] === "boolean") preferences[key] = saved[key];
       if (["zh", "en"].includes(saved.locale)) preferences.locale = saved.locale;
+      preferences.zoomPercent = readZoomPercent(saved.zoomPercent);
     } catch (err) {
       if (err.code !== "ENOENT") console.error("preferences:load", err.message);
     }
@@ -1049,9 +1097,21 @@ function buildMenu() {
           ? []
           : [{ role: "toggleDevTools", label: label("开发者工具", "Developer tools") }]),
         { type: "separator" },
-        { role: "resetZoom", label: label("实际大小", "Actual size") },
-        { role: "zoomIn", label: label("放大", "Zoom in") },
-        { role: "zoomOut", label: label("缩小", "Zoom out") },
+        {
+          label: label("实际大小", "Actual size"),
+          accelerator: "CmdOrCtrl+0",
+          click: () => stepDisplayZoom("reset"),
+        },
+        {
+          label: label("放大", "Zoom in"),
+          accelerator: "CmdOrCtrl+Plus",
+          click: () => stepDisplayZoom("in"),
+        },
+        {
+          label: label("缩小", "Zoom out"),
+          accelerator: "CmdOrCtrl+-",
+          click: () => stepDisplayZoom("out"),
+        },
         { type: "separator" },
         { role: "togglefullscreen", label: label("全屏", "Full screen") },
       ],

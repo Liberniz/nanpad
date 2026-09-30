@@ -13,6 +13,11 @@ let instance;
 try {
   instance = await electron.launch({ args: [resolve("electron/main.mjs")], env, timeout: 45000 });
   const page = await instance.firstWindow();
+  await instance.evaluate(({ BrowserWindow }) => {
+    const window = BrowserWindow.getAllWindows()[0];
+    window.webContents.setBackgroundThrottling(false);
+    window.showInactive();
+  });
   const errors = [];
   page.on("pageerror", (error) => {
     errors.push(error.message);
@@ -92,6 +97,7 @@ try {
   });
   await page.reload();
   await page.locator('[data-app-ready="true"]').waitFor();
+  await page.getByRole("button", { name: /^标签/ }).first().click();
   await page.getByRole("button", { name: "表格视图", exact: true }).click();
   await page.locator(".asset-table tbody tr").first().waitFor();
   assert.equal(await page.locator(".asset-table tbody tr").count(), 25);
@@ -109,8 +115,8 @@ try {
     numbers,
     [...numbers].sort((a, b) => (descending ? b - a : a - b)),
   );
-  await mkdir("screenshots", { recursive: true });
-  await page.screenshot({ path: "screenshots/nanpad-table.png" });
+  await mkdir("release/screenshots", { recursive: true });
+  await page.screenshot({ path: "release/screenshots/nanpad-table.png" });
   await page.getByRole("textbox", { name: "筛选当前列表" }).fill("qa-primary");
   assert.equal(await page.locator(".asset-table tbody tr").count(), 3);
   await page.getByRole("button", { name: "编辑 qa-primary", exact: true }).click();
@@ -153,7 +159,7 @@ try {
   await page.getByRole("dialog", { name: "资产详情" }).waitFor();
   await page.keyboard.press("Escape");
   await page.getByRole("dialog").waitFor({ state: "hidden" });
-  await page.screenshot({ path: "screenshots/nanpad-graph.png" });
+  await page.screenshot({ path: "release/screenshots/nanpad-graph.png" });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("button", { name: "适应画布", exact: true }).click();
   await page.waitForFunction(() => {
@@ -168,17 +174,17 @@ try {
       })
     );
   });
-  await page.screenshot({ path: "screenshots/nanpad-graph-mobile.png" });
+  await page.screenshot({ path: "release/screenshots/nanpad-graph-mobile.png" });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   await page.getByRole("button", { name: "表格视图", exact: true }).click();
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   assert.ok(
     await page.locator(".asset-table-scroll").evaluate((el) => el.scrollWidth > el.clientWidth),
   );
-  await page.screenshot({ path: "screenshots/nanpad-table-mobile.png" });
+  await page.screenshot({ path: "release/screenshots/nanpad-table-mobile.png" });
   await page.getByRole("button", { name: "打开菜单", exact: true }).click();
   await page.getByRole("button", { name: "更多操作", exact: true }).click();
-  await page.getByRole("button", { name: "设置…", exact: true }).click();
+  await page.getByText("系统设置…", { exact: true }).click();
   await page.getByRole("button", { name: "深色", exact: true }).click();
   await page.getByRole("combobox", { name: "语言", exact: true }).click();
   await page.getByRole("option", { name: "English", exact: true }).click();
@@ -188,12 +194,14 @@ try {
     .click();
   await page.reload();
   await page.locator('[data-app-ready="true"]').waitFor();
+  await page.getByRole("button", { name: "Open menu", exact: true }).click();
+  await page.locator("nav").getByRole("button", { name: "Tags", exact: true }).click();
   await page.locator(".asset-table").waitFor();
   assert.equal(await page.locator("html").getAttribute("data-theme"), "dark");
   await page.getByRole("textbox", { name: "Filter this list" }).fill("qa-primary");
   await page.getByRole("button", { name: "Relationship graph", exact: true }).click();
   await page.locator(".react-flow__edge-path").first().waitFor({ state: "attached" });
-  await page.screenshot({ path: "screenshots/nanpad-graph-dark-mobile.png" });
+  await page.screenshot({ path: "release/screenshots/nanpad-graph-dark-mobile.png" });
   await page.emulateMedia({ reducedMotion: "reduce" });
   assert.equal(
     await page
@@ -204,7 +212,14 @@ try {
   );
   assert.equal(
     await page
-      .locator(".status-dot")
+      .locator(".live-dot")
+      .first()
+      .evaluate((el) => getComputedStyle(el).animationName),
+    "none",
+  );
+  assert.equal(
+    await page
+      .locator(".sonar-ring")
       .first()
       .evaluate((el) => getComputedStyle(el).animationName),
     "none",

@@ -212,12 +212,24 @@ export interface DesktopBridge {
     }): Promise<import("./profile").Profile>;
   };
   agent: import("./agent-client").AgentBridge;
+  display: {
+    get(): Promise<{ zoomPercent: import("../../electron/services/display.mjs").ZoomPercent }>;
+    set(
+      zoomPercent: import("../../electron/services/display.mjs").ZoomPercent,
+    ): Promise<{ zoomPercent: import("../../electron/services/display.mjs").ZoomPercent }>;
+    onChanged(
+      handler: (state: {
+        zoomPercent: import("../../electron/services/display.mjs").ZoomPercent;
+      }) => void,
+    ): () => void;
+    onError(handler: (event: { message: string }) => void): () => void;
+  };
   preferences: {
     get(): Promise<DesktopPreferences>;
     set(patch: Partial<DesktopPreferences>): Promise<DesktopPreferences>;
   };
   onAttention(
-    handler: (event: { kind: import("./types").AssetKind; id: string }) => void,
+    handler: (event: { kind: import("./types").AssetKind | "phone"; id: string }) => void,
   ): () => void;
   onVaultChanged(handler: () => void): () => void;
   metrics: {

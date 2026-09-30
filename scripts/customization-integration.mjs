@@ -14,6 +14,11 @@ try {
   instance = await electron.launch({ args: [resolve("electron/main.mjs")], env, timeout: 45000 });
   assert.equal(await instance.evaluate(({ app }) => app.getPath("userData")), directory);
   const page = await instance.firstWindow();
+  await instance.evaluate(({ BrowserWindow }) => {
+    const window = BrowserWindow.getAllWindows()[0];
+    window.webContents.setBackgroundThrottling(false);
+    window.showInactive();
+  });
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -41,7 +46,7 @@ try {
   });
   const openProfile = async () => {
     await page.getByRole("button", { name: "更多操作", exact: true }).click();
-    await page.getByRole("button", { name: "设置…", exact: true }).click();
+    await page.getByText("系统设置…", { exact: true }).click();
     const settings = page.getByRole("dialog", { name: "设置", exact: true });
     await settings.getByRole("button", { name: "个人资料", exact: true }).click();
     await settings.getByLabel("个人头像", { exact: true }).waitFor({ state: "attached" });
@@ -78,7 +83,7 @@ try {
     profile.avatarDataUrl,
   );
 
-  await mkdir("screenshots", { recursive: true });
+  await mkdir("release/screenshots", { recursive: true });
   await settings.evaluate(async (element) => {
     await Promise.all(
       element
@@ -87,9 +92,9 @@ try {
         .map((animation) => animation.finished.catch(() => {})),
     );
   });
-  await page.screenshot({ path: "screenshots/nanpad-profile-image-desktop.png" });
+  await page.screenshot({ path: "release/screenshots/nanpad-profile-image-desktop.png" });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.screenshot({ path: "screenshots/nanpad-profile-image-mobile.png" });
+  await page.screenshot({ path: "release/screenshots/nanpad-profile-image-mobile.png" });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.reload();
@@ -99,13 +104,11 @@ try {
     profile.avatarDataUrl,
   );
   settings = await openProfile();
-  await settings
-    .getByLabel("个人头像", { exact: true })
-    .setInputFiles({
-      name: "invalid.svg",
-      mimeType: "image/svg+xml",
-      buffer: Buffer.from("<svg xmlns='http://www.w3.org/2000/svg'/>"),
-    });
+  await settings.getByLabel("个人头像", { exact: true }).setInputFiles({
+    name: "invalid.svg",
+    mimeType: "image/svg+xml",
+    buffer: Buffer.from("<svg xmlns='http://www.w3.org/2000/svg'/>"),
+  });
   await settings.getByRole("alert").waitFor();
   assert.equal(
     await settings.getByRole("img", { name: "个人头像", exact: true }).getAttribute("src"),
@@ -116,10 +119,13 @@ try {
   await settings.getByRole("button", { name: "关闭", exact: true }).click();
   await settings.waitFor({ state: "detached" });
 
-  await page.getByRole("button", { name: "AI 订阅", exact: true }).click();
+  await page
+    .locator("nav")
+    .getByRole("button", { name: /^AI 订阅/ })
+    .click();
   await page.getByRole("button", { name: "添加资产", exact: true }).click();
   let composer = page.getByRole("dialog", { name: "添加 AI 订阅", exact: true });
-  await composer.getByRole("tab", { name: "手动填写", exact: true }).click();
+  await composer.getByRole("button", { name: "仅手动记录", exact: true }).click();
   await composer.getByLabel("名称", { exact: true }).fill("图片验证订阅");
   await composer.getByLabel("厂商", { exact: true }).fill("自定义 AI");
   await composer.getByLabel("资产图片", { exact: true }).setInputFiles(payload("jpeg"));
@@ -153,9 +159,9 @@ try {
     const panel = document.querySelector('[role="dialog"][aria-label="编辑 AI 订阅"]');
     return panel?.getAttribute("data-shown") === "true" && getComputedStyle(panel).opacity === "1";
   });
-  await page.screenshot({ path: "screenshots/nanpad-asset-image-desktop.png" });
+  await page.screenshot({ path: "release/screenshots/nanpad-asset-image-desktop.png" });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.screenshot({ path: "screenshots/nanpad-asset-image-mobile.png" });
+  await page.screenshot({ path: "release/screenshots/nanpad-asset-image-mobile.png" });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await page.setViewportSize({ width: 1280, height: 900 });
   await composer.getByLabel("名称", { exact: true }).fill("图片修改后保留");
@@ -168,7 +174,10 @@ try {
   await page.reload();
   await page.getByText("桌面验证用户", { exact: true }).waitFor();
   assert.equal(await page.getByRole("img", { name: "个人头像", exact: true }).count(), 0);
-  await page.getByRole("button", { name: "AI 订阅", exact: true }).click();
+  await page
+    .locator("nav")
+    .getByRole("button", { name: /^AI 订阅/ })
+    .click();
   await loadedImage(
     page
       .locator(`[data-asset-id="${asset.id}"]`)

@@ -1,3 +1,5 @@
+import { useAppStore } from "@/lib/store";
+import { canProbeServer } from "@/lib/server-observation.mjs";
 import { RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -24,7 +26,17 @@ export function RefreshAllButton({ kind }: { kind: ProbeKind | null }) {
       disabled={busy}
       title={t("重新采集全部{0}", t(LABEL[kind]))}
       onClick={async () => {
-        if (NEEDS_VAULT[kind] && !(await requireVault(t("采集主机指标需要读取已保存的 SSH 凭据。")))) {
+        if (
+          kind === "server" &&
+          !useAppStore.getState().servers.some((server) => !server.demo && canProbeServer(server))
+        ) {
+          toast(t("先为需要采集的主机配置 SSH。"));
+          return;
+        }
+        if (
+          NEEDS_VAULT[kind] &&
+          !(await requireVault(t("采集主机指标需要读取已保存的 SSH 凭据。")))
+        ) {
           return;
         }
         setBusy(true);
@@ -46,6 +58,10 @@ export function RefreshAllButton({ kind }: { kind: ProbeKind | null }) {
 /** Probe one asset, from its detail sheet. */
 export function RefreshOneButton({ kind, id }: { kind: ProbeKind; id: string }) {
   const busy = useProbeState((s) => Boolean(s.busy[id]));
+  const configured = useAppStore(
+    (s) =>
+      kind !== "server" || s.servers.find((server) => server.id === id)?.sshConfigured !== false,
+  );
   const requireVault = useVault((s) => s.require);
   if (!isDesktop()) return null;
 
@@ -54,10 +70,17 @@ export function RefreshOneButton({ kind, id }: { kind: ProbeKind; id: string }) 
       variant="ghost"
       size="icon-sm"
       disabled={busy}
-      aria-label={t("重新采集")}
-      title={t("重新采集")}
+      aria-label={t(configured ? "重新采集" : "配置 SSH")}
+      title={t(configured ? "重新采集" : "配置 SSH")}
       onClick={async () => {
-        if (NEEDS_VAULT[kind] && !(await requireVault(t("采集主机指标需要读取已保存的 SSH 凭据。")))) {
+        if (!configured) {
+          useAppStore.getState().openComposer("server", id);
+          return;
+        }
+        if (
+          NEEDS_VAULT[kind] &&
+          !(await requireVault(t("采集主机指标需要读取已保存的 SSH 凭据。")))
+        ) {
           return;
         }
         await refreshById(kind, id);

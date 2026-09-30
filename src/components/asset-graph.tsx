@@ -63,7 +63,7 @@ function GraphNode({ id, data, isConnectable }: NodeProps<AssetNode>) {
           <Icon className="size-4" />
           {t(KIND_LABEL[asset.kind])}
         </span>
-        <StatusBadge status={asset.status} />
+        <StatusBadge status={asset.status} pending={asset.pending} />
       </div>
       <button
         className="nodrag asset-name"

@@ -1,3 +1,4 @@
+import { migrateServerDocument } from "./document-migration.mjs";
 import { uploadImage } from "./image-bed";
 import { inspectRaster } from "../../electron/services/image-data.mjs";
 import { create } from "zustand";
@@ -20,7 +21,7 @@ export interface DocumentSummary extends Omit<DocumentAsset, "content"> {
 export interface DocumentsBridge {
   list(): Promise<DocumentSummary[]>;
   get(id: string): Promise<DocumentAsset>;
-  save(doc: DocumentAsset): Promise<DocumentAsset>;
+  save(doc: DocumentAsset & { createOnly?: boolean }): Promise<DocumentAsset>;
   remove(id: string): Promise<void>;
 }
 const local: DocumentsBridge = {
@@ -36,7 +37,10 @@ const local: DocumentsBridge = {
     return JSON.parse(raw);
   },
   async save(doc) {
-    const next = { ...doc, updatedAt: new Date().toISOString() };
+    const existing = localStorage.getItem("nanpad-doc:" + doc.id);
+    if (doc.createOnly && existing) return JSON.parse(existing);
+    const { createOnly: _createOnly, ...content } = doc;
+    const next = { ...content, updatedAt: new Date().toISOString() };
     localStorage.setItem("nanpad-doc:" + doc.id, JSON.stringify(next));
     return next;
   },
@@ -75,7 +79,8 @@ interface State {
   loaded: boolean;
   load(): Promise<void>;
   open(id: string): Promise<void>;
-  create(bindings?: AssetRef[]): Promise<void>;
+  create(bindings?: AssetRef[], initial?: Pick<DocumentAsset, "title" | "content">): Promise<void>;
+  importServer(server: { id: string; name: string; docs?: string }): Promise<void>;
   change(doc: DocumentAsset): void;
   flush(id: string): Promise<void>;
   remove(id: string): Promise<void>;
@@ -103,14 +108,14 @@ export const useDocuments = create<State>((set, get) => ({
       status: { ...s.status, [id]: s.status[id] ?? "saved" },
     }));
   },
-  async create(bindings = []) {
+  async create(bindings = [], initial) {
     const existing = get().selected;
     if (existing && get().status[existing] !== "saved") await get().flush(existing);
     const now = new Date().toISOString();
     const doc = await api().save({
       id: "doc-" + crypto.randomUUID(),
-      title: "未命名文档",
-      content: { type: "doc", content: [{ type: "paragraph" }] },
+      title: initial?.title ?? "未命名文档",
+      content: initial?.content ?? { type: "doc", content: [{ type: "paragraph" }] },
       bindings,
       createdAt: now,
       updatedAt: now,
@@ -120,6 +125,18 @@ export const useDocuments = create<State>((set, get) => ({
       drafts: { ...s.drafts, [doc.id]: doc },
       list: [summary(doc), ...s.list],
       status: { ...s.status, [doc.id]: "saved" },
+    }));
+  },
+  async importServer(server) {
+    const existing = get().selected;
+    if (existing && get().status[existing] !== "saved") await get().flush(existing);
+    const doc = await migrateServerDocument(server, api());
+    set((s) => ({
+      selected: doc.id,
+      drafts: { ...s.drafts, [doc.id]: doc },
+      list: [summary(doc), ...s.list.filter((item) => item.id !== doc.id)],
+      status: { ...s.status, [doc.id]: "saved" },
+      errors: { ...s.errors, [doc.id]: "" },
     }));
   },
   change(doc) {

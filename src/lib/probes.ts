@@ -1,3 +1,4 @@
+import { canProbeServer } from "./server-observation.mjs";
 import { ProbeFlights, currentProbeAsset } from "./probe-guard";
 import { create } from "zustand";
 import { desktop, formatUptime } from "./desktop";
@@ -47,7 +48,7 @@ export function refreshServer(server: Server): Promise<void> {
 }
 
 async function probeServer(server: Server): Promise<void> {
-  if (server.demo) return;
+  if (server.demo || !canProbeServer(server)) return;
   const bridge = desktop();
   if (!bridge) return;
   busy(server.id, true);
@@ -218,7 +219,7 @@ export async function refreshAll(kind: "server" | "domain" | "cert"): Promise<nu
   const s = useAppStore.getState();
   const jobs: Array<() => Promise<void>> =
     kind === "server"
-      ? s.servers.filter((x) => !x.demo).map((x) => () => refreshServer(x))
+      ? s.servers.filter((x) => !x.demo && canProbeServer(x)).map((x) => () => refreshServer(x))
       : kind === "domain"
         ? s.domains.filter((x) => !x.demo).map((x) => () => refreshDomain(x))
         : s.certs.filter((x) => !x.demo).map((x) => () => refreshCert(x));

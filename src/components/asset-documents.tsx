@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Plus, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { useDocuments } from "@/lib/documents";
@@ -8,6 +8,7 @@ import { Button } from "./ui/button";
 import { t } from "@/lib/i18n";
 const fail = (e: unknown) => toast.error(String(e));
 export function AssetDocuments({ asset }: { asset: AssetRef }) {
+  const [busy, setBusy] = useState(false);
   const list = useDocuments((s) => s.list);
   const load = useDocuments((s) => s.load);
   useEffect(() => {
@@ -18,6 +19,8 @@ export function AssetDocuments({ asset }: { asset: AssetRef }) {
     [list, asset],
   );
   async function enter(id?: string) {
+    if (busy) return;
+    setBusy(true);
     try {
       if (id) await useDocuments.getState().open(id);
       else await useDocuments.getState().create([{ kind: asset.kind, id: asset.id }]);
@@ -25,6 +28,8 @@ export function AssetDocuments({ asset }: { asset: AssetRef }) {
       useAppStore.getState().setView("docs");
     } catch (e) {
       fail(e);
+    } finally {
+      setBusy(false);
     }
   }
   return (
@@ -33,7 +38,7 @@ export function AssetDocuments({ asset }: { asset: AssetRef }) {
         <h3 className="text-sm font-semibold">
           {t("关联文档")} · {bound.length}
         </h3>
-        <Button size="sm" variant="outline" onClick={() => void enter()}>
+        <Button size="sm" variant="outline" disabled={busy} onClick={() => void enter()}>
           <Plus />
           {t("新建文档")}
         </Button>
@@ -43,10 +48,12 @@ export function AssetDocuments({ asset }: { asset: AssetRef }) {
           type="button"
           className="flex w-full items-center gap-2 rounded-md p-2 text-left text-sm hover:bg-line"
           key={doc.id}
+          disabled={busy}
           onClick={() => void enter(doc.id)}
         >
           <FileText className="size-4" />
-          {doc.title}
+          <span className="min-w-0 flex-1 truncate">{doc.title}</span>
+          <span className="shrink-0 text-xs text-muted">{t("打开编辑")}</span>
         </button>
       ))}
       {!bound.length && (

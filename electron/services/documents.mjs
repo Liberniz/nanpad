@@ -155,11 +155,20 @@ export class DocumentsStore {
   }
   save(input) {
     const clean = normalizeDocument(input);
+    const createOnly = input.createOnly === true;
     const job = this.#queue.then(async () => {
       const path = this.#path(clean.id);
       let createdAt = new Date().toISOString();
       try {
-        createdAt = JSON.parse(await readFile(path, "utf8")).createdAt || createdAt;
+        const existing = JSON.parse(await readFile(path, "utf8"));
+        // 显式迁移只创建缺失文档，队列内检查避免并发导入覆盖用户后续编辑。
+        if (createOnly)
+          return {
+            ...normalizeDocument(existing),
+            createdAt: existing.createdAt,
+            updatedAt: existing.updatedAt,
+          };
+        createdAt = existing.createdAt || createdAt;
       } catch (error) {
         if (error.code !== "ENOENT") throw error;
       }

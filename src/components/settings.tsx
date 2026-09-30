@@ -25,8 +25,8 @@ import { Field, Input, Select } from "./ui/input";
 import { RELEASES } from "@/lib/changelog";
 import { desktop, type AppInfo } from "@/lib/desktop";
 import { usePresence } from "@/lib/motion";
-import { useSettings, type ThemeChoice } from "@/lib/settings";
-import { useAppStore } from "@/lib/store";
+import { useSettings, ZOOM_PERCENTS, type ZoomPercent, type ThemeChoice } from "@/lib/settings";
+import { snapshotOf, useAppStore } from "@/lib/store";
 import { cn, downloadJson } from "@/lib/utils";
 import { useVault } from "@/lib/vault-state";
 import { t, type LocaleChoice } from "@/lib/i18n";
@@ -89,7 +89,7 @@ export function Settings() {
         aria-label={t("设置")}
         className="settings-dialog anim-panel relative z-10 flex h-[min(620px,86vh)] w-full max-w-3xl overflow-hidden rounded-2xl bg-card shadow-float"
       >
-        <nav className="flex w-40 shrink-0 flex-col gap-0.5 border-r border-line p-2">
+        <nav className="flex min-h-0 w-40 shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-line p-2">
           <h2 className="px-3 pb-2 pt-3 text-meta font-semibold tracking-tight">{t("设置")}</h2>
           {TABS.map((entry) => (
             <button
@@ -161,6 +161,22 @@ const THEMES: Array<{ id: ThemeChoice; label: string; icon: LucideIcon }> = [
 ];
 
 function Appearance() {
+  const zoomPercent = useSettings((s) => s.zoomPercent);
+  const zoomReady = useSettings((s) => s.zoomReady);
+  const setZoomPercent = useSettings((s) => s.setZoomPercent);
+  const [zoomBusy, setZoomBusy] = useState(false);
+  const [zoomError, setZoomError] = useState<string | null>(null);
+  const changeZoom = async (value: ZoomPercent) => {
+    setZoomBusy(true);
+    setZoomError(null);
+    try {
+      await setZoomPercent(value);
+    } catch (error) {
+      setZoomError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setZoomBusy(false);
+    }
+  };
   const language = useSettings((s) => s.language);
   const setLanguage = useSettings((s) => s.setLanguage);
   const theme = useSettings((s) => s.theme);
@@ -182,7 +198,45 @@ function Appearance() {
           ]}
         />
       </Row>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="border-b border-line py-3">
+        <div className="text-meta font-medium">{t("界面大小")}</div>
+        <p className="mt-1 text-2xs leading-relaxed text-muted">
+          {t("调整文字与控件大小，不改变系统显示设置。")}
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <div role="group" aria-label={t("界面大小")} className="flex flex-wrap gap-2">
+            {ZOOM_PERCENTS.map((value) => (
+              <Button
+                key={value}
+                variant={zoomPercent === value ? "solid" : "outline"}
+                size="sm"
+                aria-pressed={zoomPercent === value}
+                disabled={!zoomReady || zoomBusy}
+                onClick={() => void changeZoom(value)}
+              >
+                {value}%
+              </Button>
+            ))}
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!zoomReady || zoomBusy || zoomPercent === 100}
+            onClick={() => void changeZoom(100)}
+          >
+            {t("恢复默认大小")}
+          </Button>
+        </div>
+        <p className="mt-2 text-2xs text-muted">
+          {t("快捷键：Ctrl / ⌘ + 加减号调整，Ctrl / ⌘ + 0 恢复 100%。")}
+        </p>
+        {zoomError && (
+          <p role="alert" className="mt-2 text-meta text-crit">
+            {t("界面大小设置失败：{0}", zoomError)}
+          </p>
+        )}
+      </div>
+      <div className="mt-4 grid grid-cols-3 gap-3">
         {THEMES.map((option) => {
           const on = theme === option.id;
           const Icon = option.icon;
@@ -375,15 +429,7 @@ function DataSection() {
           size="sm"
           onClick={() => {
             const s = useAppStore.getState();
-            downloadJson("sinan-assets.json", {
-              links: s.links,
-              servers: s.servers,
-              domains: s.domains,
-              mailboxes: s.mailboxes,
-              aiAssets: s.aiAssets,
-              secrets: s.secrets,
-              certs: s.certs,
-            });
+            downloadJson("sinan-assets.json", snapshotOf(s));
             log(t("已导出资产快照"));
           }}
         >

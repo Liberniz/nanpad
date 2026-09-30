@@ -4,6 +4,7 @@ import { desktop } from "@/lib/desktop";
 import { useProfile } from "@/lib/profile";
 import { useVault } from "@/lib/vault-state";
 import { t } from "@/lib/i18n";
+import { initialWorkspaceName } from "@/lib/composer-draft.mjs";
 import { Button } from "./ui/button";
 import { Field, Input } from "./ui/input";
 import { LogoMark } from "./logo";
@@ -11,7 +12,9 @@ import { ImagePicker } from "./image-picker";
 
 export function ProfileForm({ initial = false }: { initial?: boolean }) {
   const profile = useProfile((s) => s.profile);
-  const [name, setName] = useState(profile?.name ?? "");
+  const [name, setName] = useState(() =>
+    initial ? initialWorkspaceName(profile?.name, t("我的工作区")) : (profile?.name ?? ""),
+  );
   const [avatar, setAvatar] = useState(profile?.avatarDataUrl ?? "");
   const [imageBusy, setImageBusy] = useState(false);
   const [password, setPassword] = useState("");
@@ -32,7 +35,7 @@ export function ProfileForm({ initial = false }: { initial?: boolean }) {
           if (initial && !profile?.vaultExists && password !== confirm)
             throw new Error(t("两次主密码不一致"));
           await desktop()?.profile.save({
-            name,
+            name: name.trim(),
             avatarDataUrl: avatar,
             password: initial ? password : undefined,
           });
@@ -48,20 +51,22 @@ export function ProfileForm({ initial = false }: { initial?: boolean }) {
         }
       }}
     >
-      <ImagePicker
-        avatar
-        value={avatar}
-        onChange={(value) => {
-          setAvatar(value);
-          setSaved(false);
-        }}
-        onBusyChange={setImageBusy}
-        disabled={busy}
-      />
-      <Field label={t("你的名字")}>
+      {!initial && (
+        <ImagePicker
+          avatar
+          value={avatar}
+          onChange={(value) => {
+            setAvatar(value);
+            setSaved(false);
+          }}
+          onBusyChange={setImageBusy}
+          disabled={busy}
+        />
+      )}
+      <Field label={t(initial ? "工作区名称" : "你的名字")}>
         <Input
-          aria-label={t("你的名字")}
-          autoFocus
+          aria-label={t(initial ? "工作区名称" : "你的名字")}
+          autoFocus={!initial}
           autoComplete="name"
           required
           maxLength={40}
@@ -71,9 +76,11 @@ export function ProfileForm({ initial = false }: { initial?: boolean }) {
       </Field>
       {initial && (
         <>
+          <p className="text-meta text-muted">{t("名称和头像可稍后在设置中修改。")}</p>
           <Field label={t(profile?.vaultExists ? "现有主密码" : "创建主密码")}>
             <Input
               aria-label={t("主密码")}
+              autoFocus
               type="password"
               autoComplete={profile?.vaultExists ? "current-password" : "new-password"}
               minLength={profile?.vaultExists ? 6 : 10}
@@ -142,7 +149,10 @@ export function Onboarding() {
       className="m-auto w-full max-w-md rounded-lg border border-line bg-card p-6 text-ink shadow-float backdrop:bg-ink/40"
     >
       <LogoMark className="mb-4 size-10" />
-      <h1 className="mb-5 text-xl font-semibold">{t("欢迎使用司南")}</h1>
+      <h1 className="mb-2 text-xl font-semibold">{t("欢迎使用司南")}</h1>
+      <p className="mb-5 text-meta leading-relaxed text-muted">
+        {t("无需注册，资产保存在本机。主密码用于保护账号与密钥。")}
+      </p>
       {error ? (
         <>
           <p role="alert" className="mb-3 text-crit">

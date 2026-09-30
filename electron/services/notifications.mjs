@@ -1,3 +1,5 @@
+import { phoneExpiry } from "./phone-numbers.mjs";
+
 export function notificationCandidates(snapshot, now = Date.now()) {
   const out = [];
   for (const s of snapshot.servers ?? []) {
@@ -30,6 +32,18 @@ export function notificationCandidates(snapshot, now = Date.now()) {
         days,
       });
     }
+  }
+  for (const phone of snapshot.phoneNumbers ?? []) {
+    const { days, status } = phoneExpiry(phone.expiresAt, new Date(now));
+    if (days === null || days > 30) continue;
+    out.push({
+      key: `phone:${phone.id}:${phone.expiresAt}:${status}:${days <= 7 ? "week" : "soon"}`,
+      kind: "phone",
+      id: phone.id,
+      name: phone.label || "••••" + phone.number.replace(/\D/g, "").slice(-4),
+      reason: "expiry",
+      days,
+    });
   }
   return out;
 }

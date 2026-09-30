@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, readFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
 import { _electron as electron } from "playwright";
@@ -31,6 +31,13 @@ try {
   assert.equal(actual.packaged, true);
   assert.equal(actual.version, JSON.parse(await readFile("package.json", "utf8")).version);
   const page = await instance.firstWindow();
+  await instance.evaluate(({ BrowserWindow }) => {
+    const window = BrowserWindow.getAllWindows()[0];
+    window.webContents.setBackgroundThrottling(false);
+    window.showInactive();
+  });
+  await mkdir("screenshots", { recursive: true });
+  await mkdir("release/screenshots", { recursive: true });
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await completeOnboarding(page);
@@ -40,7 +47,7 @@ try {
   );
   await page.getByRole("button", { name: "忽略网站", exact: true }).click();
   await page.getByText("桌面验证用户", { exact: true }).waitFor();
-  await page.getByRole("button", { name: "问答", exact: true }).click();
+  await page.locator("nav").getByRole("button", { name: "AI 助手", exact: true }).click();
   await page.getByRole("button", { name: "模型与知识库", exact: true }).click();
   await verifyOptions(page, page.getByRole("combobox", { name: "授权服务商" }), [
     "OpenAI / ChatGPT",
@@ -71,9 +78,13 @@ try {
   await page.reload();
   await page.getByText("桌面验证用户", { exact: true }).waitFor();
   assert.equal(await page.getByRole("dialog", { name: "首次设置" }).count(), 0);
-  await page.getByRole("button", { name: "AI 订阅", exact: true }).click();
+  await page
+    .locator("nav")
+    .getByRole("button", { name: /^AI 订阅/ })
+    .click();
   await page.getByRole("button", { name: "添加资产", exact: true }).click();
   const composer = page.getByRole("dialog", { name: "添加 AI 订阅", exact: true });
+  await composer.getByRole("button", { name: /^订阅账号/ }).click();
   assert.equal(
     await composer
       .getByRole("tab", { name: "快速登录", exact: true })
@@ -93,6 +104,33 @@ try {
     return panel?.getAttribute("data-shown") === "true" && getComputedStyle(panel).opacity === "1";
   });
   await page.screenshot({ path: "screenshots/nanpad-packaged-ai-login.png" });
+  await composer.getByRole("button", { name: "完成", exact: true }).click();
+  await composer.waitFor({ state: "detached" });
+  await page.locator("nav").getByRole("button", { name: "号码管理", exact: true }).click();
+  await page.getByRole("button", { name: "添加号码", exact: true }).click();
+  const phoneForm = page.getByRole("form", { name: "添加号码", exact: true });
+  await phoneForm.getByRole("textbox", { name: "号码", exact: true }).fill("00123456789");
+  await phoneForm.getByRole("textbox", { name: "号码名称", exact: true }).fill("安装包保存验证");
+  await phoneForm.getByRole("button", { name: "保存号码", exact: true }).click();
+  await page.waitForFunction(async () =>
+    (await window.sinan.store.load())?.state?.phoneNumbers?.some(
+      (phone) => phone.number === "00123456789",
+    ),
+  );
+  await page.reload();
+  await page.locator('[data-app-ready="true"]').waitFor();
+  await page.locator("nav").getByRole("button", { name: "号码管理", exact: true }).click();
+  await page.getByText("00123456789", { exact: true }).waitFor();
+  assert.equal((await page.evaluate(() => window.sinan.store.load())).state.phoneNumbers.length, 1);
+  for (const zoomPercent of [100, 110, 125, 150]) {
+    await page.evaluate((value) => window.sinan.display.set(value), zoomPercent);
+    const actualZoom = await instance.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()[0].webContents.getZoomFactor(),
+    );
+    assert.ok(Math.abs(actualZoom - zoomPercent / 100) < 0.001);
+  }
+  await page.evaluate(() => window.sinan.display.set(100));
+  await page.screenshot({ path: "release/screenshots/v110-packaged-phone.png" });
   assert.deepEqual(errors, []);
   console.log(
     JSON.stringify({
@@ -103,6 +141,8 @@ try {
       providers: 4,
       onboarding: true,
       restart: true,
+      phoneDiskPersistence: true,
+      zoomLevels: [100, 110, 125, 150],
       productionDemoDisabled: true,
       pageErrors: errors,
     }),

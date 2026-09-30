@@ -1,3 +1,5 @@
+import { hasServerObservation } from "@/lib/server-observation.mjs";
+import { StatusBadge } from "./ui/status-badge";
 import { subscriptionCost } from "@/lib/subscription-cost";
 import { useMemo } from "react";
 import {
@@ -13,7 +15,7 @@ import {
 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { useShallow } from "zustand/react/shallow";
-import { attentionOf, STATUS_LABEL, chipClass } from "@/lib/status";
+import { attentionOf } from "@/lib/status";
 import { t } from "@/lib/i18n";
 import type { ViewId } from "@/lib/types";
 import { Button } from "./ui/button";
@@ -39,7 +41,14 @@ export function Overview() {
     {
       label: "服务器",
       value: servers.length,
-      detail: t("{0} 台状态正常", servers.filter((s) => s.status === "online").length),
+      detail: servers.some((server) => !hasServerObservation(server))
+        ? t(
+            "{0} 台正常 · {1} 台未采集",
+            servers.filter((server) => hasServerObservation(server) && server.status === "online")
+              .length,
+            servers.filter((server) => !hasServerObservation(server)).length,
+          )
+        : t("{0} 台状态正常", servers.filter((server) => server.status === "online").length),
       icon: Server,
       view: "servers",
     },
@@ -108,6 +117,7 @@ export function Overview() {
             {(
               [
                 ["servers", "服务器", counts.servers],
+                ["phones", "号码台账", counts.phones],
                 ["domains", "域名", counts.domains],
                 ["mail", "邮箱", counts.mail],
                 ["ai", "AI 订阅", counts.ai],
@@ -159,7 +169,7 @@ export function Overview() {
                     <span className="block truncate text-sm font-semibold">{server.name}</span>
                     <span className="mt-1 block truncate text-sm text-muted">{server.host}</span>
                   </span>
-                  <span className={chipClass(server.status)}>{t(STATUS_LABEL[server.status])}</span>
+                  <StatusBadge status={server.status} pending={!hasServerObservation(server)} />
                 </button>
               ))}
             </div>

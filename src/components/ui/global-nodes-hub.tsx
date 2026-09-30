@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n";
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { ServerNodesPanel } from "../server-nodes-panel";
@@ -29,8 +30,9 @@ export function GlobalNodesHub() {
         </div>
       </div>
       <div className="rounded-xl border border-line bg-card p-4 text-sm text-muted">
-        3x-ui
-        的真实流量在「用量记录」中连接面板后采集，可按入站或客户端筛选并关联节点。机场订阅统计整个订阅的用量。
+        {t(
+          "先导入节点，再点「连接流量统计」。3x-ui 可按入站或客户端统计，机场订阅统计整个订阅的用量。",
+        )}
       </div>
       {server ? (
         <div className="rounded-xl border border-line">

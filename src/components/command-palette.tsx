@@ -1,6 +1,7 @@
 import { Command } from "cmdk";
 import {
   Bot,
+  Phone,
   Globe,
   KeyRound,
   Mail,
@@ -81,6 +82,7 @@ function Palette({ shown, onClose }: { shown: boolean; onClose: () => void }) {
   const aiAssets = useAppStore((s) => s.aiAssets);
   const secrets = useAppStore((s) => s.secrets);
   const certs = useAppStore((s) => s.certs);
+  const phoneNumbers = useAppStore((s) => s.phoneNumbers);
 
   /**
    * Sections are built from data and empty ones are dropped — a heading with
@@ -135,22 +137,36 @@ function Palette({ shown, onClose }: { shown: boolean; onClose: () => void }) {
     }));
     out.push({ heading: t("页面"), entries: pages });
 
-    const sshEntries: Entry[] = servers.map((s) => ({
-      id: `ssh:${s.id}`,
-      search: `ssh ${s.name} ${s.host} ${s.username} ${tagsOf(s).join(" ")}`,
-      icon: SquareTerminal,
-      label: t("连接 {0}", s.name),
-      meta: `${s.username}@${s.host}`,
-      hint: s.status === "offline" ? t("离线") : undefined,
-      run: () => {
-        if (s.status !== "offline") openSsh(s.id);
-        else setView("servers");
-        onClose();
-      },
-    }));
+    const sshEntries: Entry[] = servers
+      .filter((server) => server.sshConfigured !== false)
+      .map((s) => ({
+        id: `ssh:${s.id}`,
+        search: `ssh ${s.name} ${s.host} ${s.username} ${tagsOf(s).join(" ")}`,
+        icon: SquareTerminal,
+        label: t("连接 {0}", s.name),
+        meta: `${s.username}@${s.host}`,
+        hint: s.status === "offline" ? t("离线") : undefined,
+        run: () => {
+          if (s.status !== "offline") openSsh(s.id);
+          else setView("servers");
+          onClose();
+        },
+      }));
     if (sshEntries.length) out.push({ heading: t("SSH 会话"), entries: sshEntries });
 
     const assets: Entry[] = [
+      ...phoneNumbers.map((phone) => ({
+        id: `phone:${phone.id}`,
+        search: `${phone.number} ${phone.label} ${phone.provider}`,
+        icon: Phone,
+        label: phone.label || phone.number,
+        meta: phone.number,
+        run: () => {
+          setView("phones");
+          useAppStore.getState().setQuery(phone.number);
+          onClose();
+        },
+      })),
       ...servers.map((s) => asset("server", s.id, s.name, s.host, tagsOf(s), "servers")),
       ...domains.map((s) => asset("domain", s.id, s.name, s.registrar, tagsOf(s), "domains")),
       ...mailboxes.map((s) => asset("mail", s.id, s.address, s.domain, tagsOf(s), "mail")),
@@ -195,6 +211,7 @@ function Palette({ shown, onClose }: { shown: boolean; onClose: () => void }) {
     return out;
   }, [
     servers,
+    phoneNumbers,
     domains,
     mailboxes,
     aiAssets,
@@ -229,7 +246,6 @@ function Palette({ shown, onClose }: { shown: boolean; onClose: () => void }) {
         />
         <Command.List className="min-h-0 flex-1 overflow-y-auto p-2">
           <Command.Empty className="px-3 py-10 text-center text-meta text-muted">
-
             {t("没有匹配项")}
           </Command.Empty>
           {sections.map((section) => (
@@ -250,13 +266,13 @@ function Palette({ shown, onClose }: { shown: boolean; onClose: () => void }) {
         <footer className="flex shrink-0 items-center gap-4 border-t border-line px-4 py-2 text-2xs text-subtle">
           <span>
             <Key>↑</Key>
-            <Key>↓</Key>  {t("选择")}
+            <Key>↓</Key> {t("选择")}
           </span>
           <span>
-            <Key>↵</Key>  {t("打开")}
+            <Key>↵</Key> {t("打开")}
           </span>
           <span>
-            <Key>esc</Key>  {t("关闭")}
+            <Key>esc</Key> {t("关闭")}
           </span>
         </footer>
       </Command>

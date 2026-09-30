@@ -1,6 +1,10 @@
+import { hasServerMetrics, hasServerObservation } from "@/lib/server-observation.mjs";
 import { subscriptionCost } from "@/lib/subscription-cost";
 const DocumentsWorkspace = lazy(() =>
   import("./documents-workspace").then((m) => ({ default: m.DocumentsWorkspace })),
+);
+const PhoneWorkspace = lazy(() =>
+  import("./phone-workspace").then((module) => ({ default: module.PhoneWorkspace })),
 );
 const UsageWorkspace = lazy(() =>
   import("./usage-workspace").then((m) => ({ default: m.UsageWorkspace })),
@@ -79,6 +83,8 @@ function ViewBody() {
       return <DocumentsWorkspace />;
     case "usage":
       return <UsageWorkspace />;
+    case "phones":
+      return <PhoneWorkspace />;
     case "overview":
       return <Overview />;
     case "nodes":
@@ -240,6 +246,7 @@ function ListHeader() {
 
 /** Which live probe the refresh button in this view should run. */
 const PROBE_KIND: Record<ViewId, ProbeKind | null> = {
+  phones: null,
   docs: null,
   usage: null,
   overview: "server",
@@ -256,6 +263,7 @@ const PROBE_KIND: Record<ViewId, ProbeKind | null> = {
 };
 
 const BADGE_KEY: Record<ViewId, keyof ReturnType<typeof attentionOf>> = {
+  phones: "phones",
   docs: "total",
   usage: "total",
   overview: "total",
@@ -356,7 +364,11 @@ function useListFilter<T extends { status: Status } & Partial<Taggable>>(
   const query = useAppStore((s) => s.query);
   const tagFilter = useAppStore((s) => s.tagFilter);
   return list.filter((item) => {
-    if (filter === "attention" && item.status === "online") return false;
+    if (
+      filter === "attention" &&
+      (item.status === "online" || ("lastSeen" in item && !hasServerObservation(item)))
+    )
+      return false;
     if (!matchesTags(item, tagFilter)) return false;
     return match(query, ...text(item));
   });
@@ -460,7 +472,11 @@ function TagsView() {
   // which is the question worth asking of a group.
   const scope = useMemo(() => {
     const only = <T extends { status: Status }>(items: T[]) =>
-      filter === "attention" ? items.filter((x) => x.status !== "online") : items;
+      filter === "attention"
+        ? items.filter(
+            (x) => x.status !== "online" && (!("lastSeen" in x) || hasServerObservation(x)),
+          )
+        : items;
     return {
       servers: only(servers),
       domains: only(domains),
@@ -602,11 +618,17 @@ function TerminalView() {
               <button
                 key={s.id}
                 type="button"
-                disabled={s.status === "offline"}
-                onClick={() => openSsh(s.id)}
+                disabled={s.sshConfigured !== false && s.status === "offline"}
+                onClick={() =>
+                  s.sshConfigured === false
+                    ? useAppStore.getState().openComposer("server", s.id)
+                    : openSsh(s.id)
+                }
                 className="row-tap flex items-center gap-3 rounded-xl bg-card px-4 py-3 text-left shadow-card disabled:opacity-40 disabled:shadow-card"
               >
-                <span className={dotClass(s.status)} />
+                <span
+                  className={hasServerObservation(s) ? dotClass(s.status) : "status-dot bg-subtle"}
+                />
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold tracking-tight">{s.name}</p>
                   <p className="font-mono text-2xs text-muted">
@@ -620,7 +642,13 @@ function TerminalView() {
                       {t}
                     </span>
                   ))}
-                <span className="text-2xs tabular-nums text-subtle">CPU {cpu}%</span>
+                <span className="text-2xs tabular-nums text-subtle">
+                  {s.sshConfigured === false
+                    ? t("配置 SSH")
+                    : hasServerMetrics(s)
+                      ? `CPU ${cpu}%`
+                      : t("未采集")}
+                </span>
                 <SquareTerminal className="size-4 text-muted" />
               </button>
             );

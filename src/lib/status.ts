@@ -1,3 +1,5 @@
+import { phoneExpiry } from "../../electron/services/phone-numbers.mjs";
+import { hasServerObservation, serverNeedsAttention } from "./server-observation.mjs";
 import type { AssetKind, Status, ViewId } from "./types.ts";
 import { daysUntil } from "./utils.ts";
 import type { AppState } from "./store.ts";
@@ -51,7 +53,11 @@ export function expiryStatus(iso: string): Status {
   return "online";
 }
 
-export function attentionOf(s: AppState): {
+export function attentionOf(
+  s: AppState,
+  now = new Date(),
+): {
+  phones: number;
   servers: number;
   domains: number;
   mail: number;
@@ -60,27 +66,32 @@ export function attentionOf(s: AppState): {
   certs: number;
   total: number;
 } {
-  const servers = s.servers.filter((x) => x.status !== "online").length;
+  const phones = (s.phoneNumbers ?? []).filter((record) => {
+    const expiry = phoneExpiry(record.expiresAt, now);
+    return expiry.days !== null && expiry.days <= 30;
+  }).length;
+  const servers = s.servers.filter(serverNeedsAttention).length;
   const domains = s.domains.filter((x) => x.status !== "online").length;
   const mail = s.mailboxes.filter((x) => x.status !== "online").length;
   const ai = s.aiAssets.filter((x) => x.status !== "online").length;
   const vault = s.secrets.filter((x) => x.status !== "online").length;
   const certs = s.certs.filter((x) => x.status !== "online").length;
   return {
+    phones,
     servers,
     domains,
     mail,
     ai,
     vault,
     certs,
-    total: servers + domains + mail + ai + vault + certs,
+    total: servers + domains + mail + ai + vault + certs + phones,
   };
 }
 
 export function healthScore(s: AppState): number {
   const a = attentionOf(s);
   const n =
-    s.servers.length +
+    s.servers.filter(hasServerObservation).length +
     s.domains.length +
     s.mailboxes.length +
     s.aiAssets.length +
@@ -88,10 +99,10 @@ export function healthScore(s: AppState): number {
     s.certs.length;
   if (n === 0) return 100;
   const crit =
-    s.servers.filter((x) => x.status === "offline").length +
+    s.servers.filter((x) => hasServerObservation(x) && x.status === "offline").length +
     s.domains.filter((x) => x.status === "offline").length +
     s.certs.filter((x) => x.status === "offline").length;
-  const warn = a.total - crit;
+  const warn = a.total - a.phones - crit;
   const healthyWeight = n - crit - warn * 0.45;
   return Math.round(Math.max(8, Math.min(100, (healthyWeight / n) * 100)));
 }

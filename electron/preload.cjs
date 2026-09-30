@@ -116,6 +116,12 @@ contextBridge.exposeInMainWorld("sinan", {
   openDataDir: () => unwrap(ipcRenderer.invoke("shell:open-path", "userData")),
   openExternal: (url) => unwrap(ipcRenderer.invoke("shell:open-external", url)),
   pickJson: () => unwrap(ipcRenderer.invoke("dialog:pick-json")),
+  display: {
+    get: () => unwrap(ipcRenderer.invoke("display:get")),
+    set: (zoomPercent) => unwrap(ipcRenderer.invoke("display:set", zoomPercent)),
+    onChanged: (handler) => on("display:changed", handler),
+    onError: (handler) => on("display:error", handler),
+  },
   preferences: {
     get: () => unwrap(ipcRenderer.invoke("preferences:get")),
     set: (patch) => unwrap(ipcRenderer.invoke("preferences:set", patch)),

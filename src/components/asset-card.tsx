@@ -1,3 +1,4 @@
+import { hasServerMetrics, hasServerObservation } from "@/lib/server-observation.mjs";
 import type { MouseEvent } from "react";
 import {
   CircleAlert,
@@ -18,7 +19,7 @@ import { isDesktop } from "@/lib/desktop";
 import { useLive } from "@/lib/live";
 import { useProbeState } from "@/lib/probes";
 import { tagsOf } from "@/lib/tags";
-import { barTone, chipClass, dotClass, STATUS_LABEL } from "@/lib/status";
+import { barTone } from "@/lib/status";
 import { useAppStore } from "@/lib/store";
 import type {
   AiAsset,
@@ -50,12 +51,16 @@ export function ServerCard({ data, compact = true }: { data: ServerT; compact?: 
   const cpu = liveCpu ?? data.cpu;
   const mem = liveMem ?? data.memory;
   const status = data.status;
+  const observed = hasServerObservation(data);
+  const measured = hasServerMetrics(data);
 
   return (
     <article
       className={cn(
         "group relative bg-card text-left transition-all",
-        compact ? "asset-card-valuable card-tap cursor-pointer" : "asset-card-valuable rounded-2xl shadow-float",
+        compact
+          ? "asset-card-valuable card-tap cursor-pointer"
+          : "asset-card-valuable rounded-2xl shadow-float",
       )}
       data-asset-id={compact ? data.id : undefined}
       onClick={compact ? (e) => openFromEvent(e, "server", data.id) : undefined}
@@ -72,7 +77,7 @@ export function ServerCard({ data, compact = true }: { data: ServerT; compact?: 
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
             <h3 className="truncate font-semibold tracking-tight text-ink">{data.name}</h3>
-            <StatusBadge status={status} sonar={status === "online"} />
+            <StatusBadge status={status} sonar={status === "online"} pending={!observed} />
           </div>
           <p className="mt-0.5 truncate text-meta text-muted">
             {data.label} · {data.os}
@@ -89,7 +94,9 @@ export function ServerCard({ data, compact = true }: { data: ServerT; compact?: 
       </div>
 
       {/* Node / Docs / Secret Indicators */}
-      {(Boolean(data.nodes?.length) || Boolean(data.docs?.trim()) || Boolean(data.customSecrets?.length)) && (
+      {(Boolean(data.nodes?.length) ||
+        Boolean(data.docs?.trim()) ||
+        Boolean(data.customSecrets?.length)) && (
         <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-[11px]">
           {Boolean(data.nodes?.length) && (
             <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-emerald-400 font-mono">
@@ -109,18 +116,30 @@ export function ServerCard({ data, compact = true }: { data: ServerT; compact?: 
         </div>
       )}
 
-      <div className="mt-4 grid grid-cols-3 gap-3">
-        <Metric label="CPU" value={cpu} />
-        <Metric label={t("内存")} value={mem} />
-        <Metric label={t("磁盘")} value={data.disk} />
-      </div>
+      {measured ? (
+        <div className="mt-4 grid grid-cols-3 gap-3">
+          <Metric label="CPU" value={cpu} />
+          <Metric label={t("内存")} value={mem} />
+          <Metric label={t("磁盘")} value={data.disk} />
+        </div>
+      ) : (
+        <p className="mt-4 rounded-lg bg-surface p-3 text-meta text-muted">
+          {t("暂无监控数据，配置 SSH 后可手动采集。")}
+        </p>
+      )}
 
       <div className="mt-3.5 flex flex-wrap items-center gap-1.5 border-t border-line/60 pt-2.5">
         {data.tags.map((t) => (
           <CardTag key={t} tag={t} />
         ))}
         <span className="ml-auto text-2xs tabular-nums text-subtle">
-          {t("运行 {0}", data.uptime)} · <TimeAgo iso={data.lastSeen} />
+          {measured ? (
+            <>
+              {t("运行 {0}", data.uptime)} · <TimeAgo iso={data.lastSeen} />
+            </>
+          ) : (
+            t("未采集")
+          )}
         </span>
       </div>
 
@@ -234,7 +253,9 @@ export function DomainCard({ data, compact = true }: { data: Domain; compact?: b
     <article
       className={cn(
         "group relative bg-card text-left transition-all",
-        compact ? "asset-card-valuable card-tap cursor-pointer" : "asset-card-valuable rounded-2xl shadow-float",
+        compact
+          ? "asset-card-valuable card-tap cursor-pointer"
+          : "asset-card-valuable rounded-2xl shadow-float",
       )}
       data-asset-id={compact ? data.id : undefined}
       onClick={compact ? (e) => openFromEvent(e, "domain", data.id) : undefined}
@@ -281,7 +302,9 @@ export function DomainCard({ data, compact = true }: { data: Domain; compact?: b
           <p className="text-2xs font-semibold text-subtle uppercase tracking-wider">Nameservers</p>
           <ul className="flex flex-wrap gap-1.5 font-mono text-2xs text-ink">
             {data.nameservers.map((n) => (
-              <li key={n} className="code-text">{n}</li>
+              <li key={n} className="code-text">
+                {n}
+              </li>
             ))}
           </ul>
           <p className="mt-2 text-meta text-muted">{data.notes}</p>
@@ -302,7 +325,9 @@ export function MailCard({ data, compact = true }: { data: Mailbox; compact?: bo
     <article
       className={cn(
         "group relative bg-card text-left transition-all",
-        compact ? "asset-card-valuable card-tap cursor-pointer" : "asset-card-valuable rounded-2xl shadow-float",
+        compact
+          ? "asset-card-valuable card-tap cursor-pointer"
+          : "asset-card-valuable rounded-2xl shadow-float",
       )}
       data-asset-id={compact ? data.id : undefined}
       onClick={compact ? (e) => openFromEvent(e, "mail", data.id) : undefined}
@@ -348,7 +373,9 @@ export function AiCard({ data, compact = true }: { data: AiAsset; compact?: bool
     <article
       className={cn(
         "group relative bg-card text-left transition-all",
-        compact ? "asset-card-valuable card-tap cursor-pointer" : "asset-card-valuable rounded-2xl shadow-float",
+        compact
+          ? "asset-card-valuable card-tap cursor-pointer"
+          : "asset-card-valuable rounded-2xl shadow-float",
       )}
       data-asset-id={compact ? data.id : undefined}
       onClick={compact ? (e) => openFromEvent(e, "ai", data.id) : undefined}
@@ -436,7 +463,9 @@ export function SecretCard({ data, compact = true }: { data: Secret; compact?: b
     <article
       className={cn(
         "group relative bg-card text-left transition-all",
-        compact ? "asset-card-valuable card-tap cursor-pointer" : "asset-card-valuable rounded-2xl shadow-float",
+        compact
+          ? "asset-card-valuable card-tap cursor-pointer"
+          : "asset-card-valuable rounded-2xl shadow-float",
       )}
       data-asset-id={compact ? data.id : undefined}
       onClick={compact ? (e) => openFromEvent(e, "secret", data.id) : undefined}
@@ -462,7 +491,9 @@ export function SecretCard({ data, compact = true }: { data: Secret; compact?: b
       </header>
       <div className="mt-3 flex items-center justify-between text-2xs text-subtle">
         <span>{t("金融级 AES-256 加密存储")}</span>
-        <span>{t("上次轮换")} {formatDate(data.lastRotated)}</span>
+        <span>
+          {t("上次轮换")} {formatDate(data.lastRotated)}
+        </span>
       </div>
       <div className="mt-3.5 border-t border-line/60 pt-2.5">
         <TagRow tags={tagsOf(data)} />
@@ -500,7 +531,9 @@ export function CertCard({ data, compact = true }: { data: Certificate; compact?
     <article
       className={cn(
         "group relative bg-card text-left transition-all",
-        compact ? "asset-card-valuable card-tap cursor-pointer" : "asset-card-valuable rounded-2xl shadow-float",
+        compact
+          ? "asset-card-valuable card-tap cursor-pointer"
+          : "asset-card-valuable rounded-2xl shadow-float",
       )}
       data-asset-id={compact ? data.id : undefined}
       onClick={compact ? (e) => openFromEvent(e, "cert", data.id) : undefined}
@@ -545,10 +578,14 @@ export function CertCard({ data, compact = true }: { data: Certificate; compact?
       <ProbeNote id={data.id} error={data.probeError} at={data.probedAt} />
       {!compact && (
         <div className="mt-4 space-y-2 border-t border-line pt-4">
-          <p className="text-2xs font-semibold uppercase tracking-wider text-subtle">SAN 域名列表</p>
+          <p className="text-2xs font-semibold uppercase tracking-wider text-subtle">
+            SAN 域名列表
+          </p>
           <div className="flex flex-wrap gap-1.5">
             {data.sans.map((san) => (
-              <span key={san} className="code-text text-2xs">{san}</span>
+              <span key={san} className="code-text text-2xs">
+                {san}
+              </span>
             ))}
           </div>
           <p className="mt-2 text-meta text-muted">{data.notes}</p>
@@ -574,4 +611,3 @@ function CopyBtn({ text, label }: { text: string; label: string }) {
     </button>
   );
 }
-

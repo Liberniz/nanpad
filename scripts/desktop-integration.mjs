@@ -13,6 +13,11 @@ let instance;
 try {
   instance = await electron.launch({ args: [resolve("electron/main.mjs")], env, timeout: 45000 });
   const page = await instance.firstWindow();
+  await instance.evaluate(({ BrowserWindow }) => {
+    const window = BrowserWindow.getAllWindows()[0];
+    window.webContents.setBackgroundThrottling(false);
+    window.showInactive();
+  });
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await completeOnboarding(page);
@@ -105,11 +110,18 @@ try {
   );
   await page.reload();
   await page.locator('[data-app-ready="true"]').waitFor();
+  await page
+    .locator("nav")
+    .getByRole("button", { name: /^服务器/ })
+    .click();
   await page.locator('[data-asset-id="qa-host"]').click();
   await page.locator(".metric-history .recharts-line-curve").first().waitFor();
   assert.equal(await page.locator(".metric-history .recharts-line-curve").count(), 3);
   await page.getByRole("combobox", { name: "选择关联资产" }).click();
-  await page.getByRole("option").filter({ has: page.getByText("qa.example.test", { exact: true }) }).click();
+  await page
+    .getByRole("option")
+    .filter({ has: page.getByText("qa.example.test", { exact: true }) })
+    .click();
   await page.getByRole("button", { name: "添加关联", exact: true }).click();
   await page.getByRole("button", { name: "解除关联", exact: true }).waitFor();
   await page
@@ -138,10 +150,14 @@ try {
   assert.match(await readFile(calendarPath, "utf8"), /BEGIN:VEVENT/);
   await page.reload();
   await page.locator('[data-app-ready="true"]').waitFor();
+  await page
+    .locator("nav")
+    .getByRole("button", { name: /^服务器/ })
+    .click();
   await page.locator('[data-asset-id="qa-host"]').click();
   await page.getByRole("button", { name: "解除关联", exact: true }).click();
   assert.equal((await page.evaluate(() => window.sinan.store.load())).state.links.length, 0);
-  await page.screenshot({ path: "screenshots/nanpad-desktop-metrics.png" });
+  await page.screenshot({ path: "release/screenshots/nanpad-desktop-metrics.png" });
   await page.keyboard.press("Escape");
   const native = await instance.evaluate(({ BrowserWindow, Menu }) => {
     const window = BrowserWindow.getAllWindows()[0];
@@ -154,9 +170,9 @@ try {
     };
   });
   assert.ok(!native.destroyed && native.hidden, "关闭窗口应驻留托盘");
-  await mkdir("screenshots", { recursive: true });
+  await mkdir("release/screenshots", { recursive: true });
   await instance.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].show());
-  await page.screenshot({ path: "screenshots/nanpad-desktop-native.png" });
+  await page.screenshot({ path: "release/screenshots/nanpad-desktop-native.png" });
   assert.deepEqual(errors, []);
   const persisted = JSON.parse(await readFile(join(directory, "preferences.json"), "utf8"));
   assert.equal(persisted.notifications, false);

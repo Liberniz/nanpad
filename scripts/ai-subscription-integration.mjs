@@ -25,6 +25,11 @@ try {
     timeout: 45000,
   });
   const page = await instance.firstWindow();
+  await instance.evaluate(({ BrowserWindow }) => {
+    const window = BrowserWindow.getAllWindows()[0];
+    window.webContents.setBackgroundThrottling(false);
+    window.showInactive();
+  });
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await completeOnboarding(page);
@@ -179,6 +184,7 @@ try {
   const open = async () => {
     await page.getByRole("button", { name: "添加资产", exact: true }).click();
     await dialog.waitFor();
+    await dialog.getByRole("button", { name: /^订阅账号/ }).click();
   };
   const saved = async () =>
     page.evaluate(async () => (await window.sinan.store.load()).state.aiAssets);
@@ -228,19 +234,19 @@ try {
     Object.values(providerNames),
   );
   assert.equal(await dialog.isVisible(), true, "Escape 只关闭下拉菜单");
-  await mkdir("screenshots", { recursive: true });
+  await mkdir("release/screenshots", { recursive: true });
   await page.waitForFunction(() => {
     const panel = document.querySelector('[role="dialog"][aria-label="添加 AI 订阅"]');
     return panel?.getAttribute("data-shown") === "true" && getComputedStyle(panel).opacity === "1";
   });
-  await page.screenshot({ path: "screenshots/nanpad-ai-quick-login.png" });
+  await page.screenshot({ path: "release/screenshots/nanpad-ai-quick-login.png" });
   await dialog.getByRole("combobox", { name: "授权服务商" }).click();
-  await page.screenshot({ path: "screenshots/nanpad-select-desktop.png" });
+  await page.screenshot({ path: "release/screenshots/nanpad-select-desktop.png" });
   await page.keyboard.press("Escape");
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.screenshot({ path: "screenshots/nanpad-ai-quick-login-mobile.png" });
+  await page.screenshot({ path: "release/screenshots/nanpad-ai-quick-login-mobile.png" });
   await dialog.getByRole("combobox", { name: "授权服务商" }).click();
-  await page.screenshot({ path: "screenshots/nanpad-select-mobile.png" });
+  await page.screenshot({ path: "release/screenshots/nanpad-select-mobile.png" });
   await page.keyboard.press("Escape");
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -293,7 +299,7 @@ try {
   await details.getByRole("button", { name: "刷新用量", exact: true }).click();
   await details.getByText("96%", { exact: true }).first().waitFor();
   assert.equal((await saved()).find((item) => item.id === grok.id).usagePct, 96);
-  await page.screenshot({ path: "screenshots/nanpad-ai-subscription-detail.png" });
+  await page.screenshot({ path: "release/screenshots/nanpad-ai-subscription-detail.png" });
   await page.keyboard.press("Escape");
   await details.waitFor({ state: "detached" });
   const gemini = (await saved()).find((item) => item.oauthProvider === "gemini");
@@ -313,7 +319,7 @@ try {
     "25",
   );
   await remainingQuota.scrollIntoViewIfNeeded();
-  await page.screenshot({ path: "screenshots/nanpad-ai-gemini-remaining.png" });
+  await page.screenshot({ path: "release/screenshots/nanpad-ai-gemini-remaining.png" });
   await page.keyboard.press("Escape");
   await details.waitFor({ state: "detached" });
 
@@ -370,7 +376,7 @@ try {
   assert.equal(linkedSubscription.notes, "保留手动资料并等待首次授权额度");
   assert.equal((await saved()).length, 5);
   await details.getByText("Spark / 主要额度", { exact: true }).scrollIntoViewIfNeeded();
-  await page.screenshot({ path: "screenshots/nanpad-ai-first-link-delayed-usage.png" });
+  await page.screenshot({ path: "release/screenshots/nanpad-ai-first-link-delayed-usage.png" });
   assert.equal(JSON.stringify(await saved()).includes("qa-only-access"), false);
   await page.reload();
   await page.getByText("桌面验证用户", { exact: true }).waitFor();
@@ -378,7 +384,10 @@ try {
   assert.equal((await saved()).find((item) => item.id === manualSubscription.id).usagePct, 73);
 
   // 自动回调与额度失败分阶段验收；所有链接和响应仅在隔离测试进程内生成。
-  await page.getByRole("button", { name: /^AI 订阅(?:\s+\d+)?$/ }).click();
+  await page
+    .locator("nav")
+    .getByRole("button", { name: /^AI 订阅/ })
+    .click();
   await instance.evaluate(() => {
     globalThis.__qaOpenaiIdentity = "qa-openai-forbidden";
     globalThis.__qaDelayToken = true;
@@ -398,10 +407,10 @@ try {
   assert.equal(await callbackInput.getAttribute("type"), "password");
   assert.equal(await callbackInput.isEnabled(), true);
   await callbackInput.scrollIntoViewIfNeeded();
-  await page.screenshot({ path: "screenshots/nanpad-callback-visible-desktop.png" });
+  await page.screenshot({ path: "release/screenshots/nanpad-callback-visible-desktop.png" });
   await page.setViewportSize({ width: 390, height: 844 });
   await callbackInput.scrollIntoViewIfNeeded();
-  await page.screenshot({ path: "screenshots/nanpad-callback-visible-mobile.png" });
+  await page.screenshot({ path: "release/screenshots/nanpad-callback-visible-mobile.png" });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await page.setViewportSize({ width: 1280, height: 900 });
   const openedUrl = new URL(await instance.evaluate(() => globalThis.__qaOpened.at(-1)));
@@ -453,10 +462,10 @@ try {
   await explanation.waitFor();
   assert.equal(await details.getByRole("progressbar").count(), 0);
   await explanation.scrollIntoViewIfNeeded();
-  await page.screenshot({ path: "screenshots/nanpad-callback-403-desktop.png" });
+  await page.screenshot({ path: "release/screenshots/nanpad-callback-403-desktop.png" });
   await page.setViewportSize({ width: 390, height: 844 });
   await explanation.scrollIntoViewIfNeeded();
-  await page.screenshot({ path: "screenshots/nanpad-callback-403-mobile.png" });
+  await page.screenshot({ path: "release/screenshots/nanpad-callback-403-mobile.png" });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await page.setViewportSize({ width: 1280, height: 900 });
   assert.deepEqual(errors, []);

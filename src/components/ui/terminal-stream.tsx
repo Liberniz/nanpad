@@ -1,3 +1,4 @@
+import { hasServerObservation } from "@/lib/server-observation.mjs";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Terminal, RefreshCw, CheckCircle2, ShieldAlert, ChevronDown } from "lucide-react";
 import { useAppStore } from "@/lib/store";
@@ -39,7 +40,7 @@ export function TerminalStream({ className }: { className?: string }) {
     });
 
     // 资产巡检日志
-    servers.forEach((s) => {
+    servers.filter(hasServerObservation).forEach((s) => {
       const isOnline = s.status === "online";
       list.push({
         id: `srv-${s.id}`,
@@ -101,7 +102,12 @@ export function TerminalStream({ className }: { className?: string }) {
   };
 
   return (
-    <div className={cn("overflow-hidden rounded-2xl border border-white/10 bg-[#0D0D0D] shadow-xl", className)}>
+    <div
+      className={cn(
+        "overflow-hidden rounded-2xl border border-white/10 bg-[#0D0D0D] shadow-xl",
+        className,
+      )}
+    >
       {/* 终端顶部标题栏 */}
       <header className="flex h-10 items-center justify-between border-b border-white/10 bg-[#141414] px-3.5">
         <div className="flex items-center gap-2">
@@ -138,7 +144,9 @@ export function TerminalStream({ className }: { className?: string }) {
             onClick={() => setCollapsed(!collapsed)}
             className="flex items-center gap-1 rounded-md bg-white/5 px-2 py-1 text-[11px] text-neutral-300 transition-colors hover:bg-white/10 hover:text-white"
           >
-            <ChevronDown className={cn("size-3 transition-transform duration-200", collapsed && "-rotate-90")} />
+            <ChevronDown
+              className={cn("size-3 transition-transform duration-200", collapsed && "-rotate-90")}
+            />
             <span>{collapsed ? t("展开控制台") : t("收起控制台")}</span>
           </button>
         </div>
@@ -162,7 +170,9 @@ export function TerminalStream({ className }: { className?: string }) {
 
             return (
               <div key={log.id} className="log-item flex items-baseline gap-2 py-0.5">
-                <span className="log-time select-none text-[11px] text-neutral-500">{log.time}</span>
+                <span className="log-time select-none text-[11px] text-neutral-500">
+                  {log.time}
+                </span>
                 <span className={cn("log-event font-semibold", eventColor)}>{log.event}</span>
                 <span className="flex-1 text-neutral-300">{log.detail}</span>
               </div>

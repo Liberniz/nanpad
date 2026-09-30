@@ -1,6 +1,6 @@
-import { uploadImage } from "@/lib/image-bed";
+import { uploadImage, type ImageBedStatus } from "@/lib/image-bed";
 import { ImageBedSettings } from "./image-bed-settings";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
@@ -171,6 +171,24 @@ function DocumentEditor({ doc }: { doc: DocumentAsset }) {
   const [link, setLink] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [imageStatus, setImageStatus] = useState<ImageBedStatus | null>(null);
+  const [imageStatusError, setImageStatusError] = useState("");
+  const [uploadResult, setUploadResult] = useState("");
+  const [retryMigration, setRetryMigration] = useState(false);
+  const handleImageStatus = useCallback((next: ImageBedStatus) => {
+    setImageStatus(next);
+    setImageStatusError("");
+  }, []);
+  useEffect(() => {
+    const api = desktop()?.images;
+    if (api)
+      void api
+        .status()
+        .then(handleImageStatus)
+        .catch((cause) =>
+          setImageStatusError(cause instanceof Error ? cause.message : String(cause)),
+        );
+  }, [handleImageStatus]);
   const [uploadError, setUploadError] = useState("");
   const [retryFiles, setRetryFiles] = useState<File[]>([]);
   const [uploadProgress, setUploadProgress] = useState("");
@@ -287,10 +305,13 @@ function DocumentEditor({ doc }: { doc: DocumentAsset }) {
     uploadingRef.current = true;
     setUploading(true);
     setUploadError("");
+    setUploadResult("");
+    setRetryMigration(false);
     setRetryFiles([]);
+    let completed = 0;
     for (let index = 0; index < files.length; index++) {
       const file = files[index];
-      setUploadProgress("正在上传图片 " + (index + 1) + " / " + files.length);
+      setUploadProgress(t("正在插入图片 {0} / {1}", index + 1, files.length));
       try {
         const src = await documentImage(file);
         if (editor && !editor.isDestroyed && useDocuments.getState().selected === doc.id)
@@ -309,6 +330,7 @@ function DocumentEditor({ doc }: { doc: DocumentAsset }) {
               },
             });
         }
+        completed++;
         void useDocuments.getState().flush(doc.id).catch(fail);
       } catch (e) {
         setUploadError(e instanceof Error ? e.message : String(e));
@@ -316,6 +338,7 @@ function DocumentEditor({ doc }: { doc: DocumentAsset }) {
         break;
       }
     }
+    if (completed) setUploadResult(t("已插入 {0} 张图片", completed));
     uploadingRef.current = false;
     setUploading(false);
     setUploadProgress("");
@@ -342,11 +365,13 @@ function DocumentEditor({ doc }: { doc: DocumentAsset }) {
     uploadingRef.current = true;
     setUploading(true);
     setUploadError("");
+    setUploadResult("");
+    setRetryMigration(false);
     setRetryFiles([]);
     let completed = 0;
     try {
       for (const [source, name] of sources) {
-        setUploadProgress("迁移内嵌图片 " + ++completed + " / " + sources.size);
+        setUploadProgress(t("正在迁移图片 {0} / {1}", ++completed, sources.size));
         const url = await uploadImage(source, name, "document");
         const latest = useDocuments.getState().drafts[doc.id];
         if (!latest) break;
@@ -367,8 +392,9 @@ function DocumentEditor({ doc }: { doc: DocumentAsset }) {
       }
     } catch (e) {
       setUploadError(
-        (e instanceof Error ? e.message : String(e)) + "；已迁移的图片已保留，再点迁移可继续",
+        (e instanceof Error ? e.message : String(e)) + t("；已迁移的图片已保留，可继续重试。"),
       );
+      setRetryMigration(true);
     } finally {
       uploadingRef.current = false;
       setUploading(false);
@@ -400,15 +426,6 @@ function DocumentEditor({ doc }: { doc: DocumentAsset }) {
             onClick={() => setLink(editor?.getAttributes("link").href ?? "")}
           >
             <Link2 className="size-4" />
-          </button>
-          <button
-            type="button"
-            title={t("插入图片")}
-            aria-label={t("插入图片")}
-            disabled={uploading}
-            onClick={() => fileRef.current?.click()}
-          >
-            <ImagePlus className="size-4" />
           </button>
           <button
             type="button"
@@ -444,33 +461,88 @@ function DocumentEditor({ doc }: { doc: DocumentAsset }) {
           {t(status === "saved" ? "已保存" : status === "saving" ? "保存中…" : "保存")}
         </Button>
       </div>
-      <div className="border-b border-line px-4 py-2">
-        <ImageBedSettings />
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          disabled={uploading}
-          onClick={() => void migrateImages().catch(fail)}
-        >
-          上传文档内的本地图片
-        </Button>
-        <p className="mt-2 text-xs text-muted">
-          支持选择多张图片、粘贴截图或拖入照片。删除图片只移除文档引用，不删除图床文件。
-        </p>
-      </div>
-      {uploadError && (
-        <div role="alert" className="m-4 rounded-md border border-crit p-3 text-sm text-crit">
-          {uploadError}
+      <div className="space-y-3 border-b border-line px-4 py-3">
+        <div className="flex flex-wrap items-center gap-3">
           <Button
             type="button"
-            variant="outline"
             size="sm"
-            disabled={uploading || retryFiles.length === 0}
-            onClick={() => void insertImages(retryFiles)}
+            disabled={uploading || !editor}
+            onClick={() => fileRef.current?.click()}
           >
-            重试上传
+            <ImagePlus />
+            {uploading ? t("正在处理图片…") : t("插入图片")}
           </Button>
+          <p className="min-w-0 break-words text-xs text-muted" role="status">
+            {!desktop()
+              ? t("图片保存在当前浏览器的本地文档")
+              : imageStatusError
+                ? t("图片保存位置读取失败，可在图片设置中重试。")
+                : !imageStatus
+                  ? t("正在读取图片保存位置…")
+                  : imageStatus.enabled
+                    ? t("图片保存到图床：{0}", imageStatus.origin)
+                    : t("图片嵌入本机文档")}
+          </p>
+        </div>
+        <p className="text-xs text-muted">
+          {t("支持多选、粘贴截图或拖入照片。删除图片只移除文档引用。")}
+        </p>
+        {(uploading || uploadResult) && (
+          <p role="status" className="text-sm text-muted">
+            {uploading ? uploadProgress : uploadResult}
+          </p>
+        )}
+        <details>
+          <summary className="cursor-pointer text-xs text-muted">
+            {t("图片设置与已有图片迁移")}
+          </summary>
+          <div className="mt-3 space-y-2">
+            <ImageBedSettings onStatusChange={handleImageStatus} />
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={uploading}
+              onClick={() => void migrateImages().catch(fail)}
+            >
+              {t("将内嵌图片迁移到图床")}
+            </Button>
+          </div>
+        </details>
+      </div>
+      {doc.id.startsWith("doc-legacy-server-") && (
+        <p className="border-b border-line px-4 py-3 text-sm text-muted">
+          {t("旧 Markdown 已原样保存在代码块中；原始记录继续保留在服务器文档页。")}
+        </p>
+      )}
+      {uploadError && (
+        <div
+          role="alert"
+          className="m-4 space-y-2 rounded-md border border-crit p-3 text-sm text-crit"
+        >
+          <p className="break-words">{uploadError}</p>
+          {retryFiles.length > 0 && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={uploading}
+              onClick={() => void insertImages(retryFiles)}
+            >
+              {t("重试未完成的图片")}
+            </Button>
+          )}
+          {retryMigration && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={uploading}
+              onClick={() => void migrateImages().catch(fail)}
+            >
+              {t("继续迁移内嵌图片")}
+            </Button>
+          )}
         </div>
       )}
       {link !== null && (
@@ -534,11 +606,10 @@ function DocumentEditor({ doc }: { doc: DocumentAsset }) {
             onChange={(e) => update({ title: e.target.value })}
           />
           <div className="mb-8 flex flex-wrap gap-3 text-xs text-muted">
-            <span>{t("自动保存到本机")}</span>
+            <span>{t(desktop() ? "自动保存到本机" : "自动保存到当前浏览器")}</span>
             <span>
               {t("更新于")} {new Date(doc.updatedAt).toLocaleString()}
             </span>
-            {uploading && <span role="status">{uploadProgress}</span>}
           </div>
           <EditorContent
             editor={editor}

@@ -97,3 +97,37 @@ test("文档图片保存保留真实 PNG 与摘要", async () => {
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("迁移只创建一次，不覆盖已编辑和已解绑的文档", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "nanpad-docs-import-"));
+  try {
+    const store = new DocumentsStore(dir);
+    const first = await store.save({ ...doc(), createOnly: true });
+    const edited = await store.save({ ...first, title: "用户新标题", bindings: [] });
+    const repeated = await store.save({
+      ...doc(),
+      createOnly: true,
+      bindings: [{ kind: "server", id: "s1" }],
+    });
+    assert.deepEqual(repeated, edited);
+    assert.equal("createOnly" in repeated, false);
+    assert.equal((await store.list()).length, 1);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("并发迁移请求保留首次保存的内容", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "nanpad-docs-import-"));
+  try {
+    const store = new DocumentsStore(dir);
+    const [first, second] = await Promise.all([
+      store.save({ ...doc(), title: "首次内容", createOnly: true }),
+      store.save({ ...doc(), title: "稍后内容", createOnly: true }),
+    ]);
+    assert.deepEqual(second, first);
+    assert.equal((await store.get(first.id)).title, "首次内容");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

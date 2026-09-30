@@ -1,3 +1,6 @@
+import { usageFormFromDraft } from "@/lib/usage-setup.mjs";
+import { saveAndVerifyUsageSource } from "@/lib/usage-connect.mjs";
+import { t } from "@/lib/i18n";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Plus, RefreshCw, Download, Trash2, Activity } from "lucide-react";
 import { toast } from "sonner";
@@ -29,17 +32,21 @@ export function UsageWorkspace() {
   const [sourceId, setSourceId] = useState("all");
   const [kind, setKind] = useState("all");
   const [period, setPeriod] = useState("30");
-  const [form, setForm] = useState<Record<string, string>>({
-    name: "",
-    type: "3x-ui",
-    url: "",
-    username: "",
-    password: "",
-    apiKey: "",
-    inboundId: "",
-    clientEmail: "",
-    nodeId: "",
-  });
+  const [form, setForm] = useState(() => usageFormFromDraft(null));
+  const setup = useAppStore((s) => s.usageSetupDraft);
+  const [connection, setConnection] = useState<{
+    id: string;
+    name: string;
+    verified: boolean;
+    error: string;
+  } | null>(null);
+  useEffect(() => {
+    if (!setup) return;
+    setForm(usageFormFromDraft(setup));
+    setAdding(true);
+    setConnection(null);
+    useAppStore.getState().clearUsageSetup();
+  }, [setup]);
   const servers = useAppStore((s) => s.servers);
   const load = useCallback(async () => {
     const api = desktop()?.usage;
@@ -89,8 +96,16 @@ export function UsageWorkspace() {
         if (result.failures.length) toast.error(result.failures.join("；"));
       }
       await load();
+      if (id)
+        setConnection((previous) =>
+          previous?.id === id ? { ...previous, verified: true, error: "" } : previous,
+        );
     } catch (e) {
       setError(errorText(e));
+      if (id)
+        setConnection((previous) =>
+          previous?.id === id ? { ...previous, verified: false, error: errorText(e) } : previous,
+        );
       await load();
       toast.error(errorText(e));
     } finally {
@@ -121,9 +136,15 @@ export function UsageWorkspace() {
             <RefreshCw className={busy ? "animate-spin" : ""} />
             刷新全部
           </Button>
-          <Button onClick={() => setAdding(!adding)}>
+          <Button
+            disabled={busy}
+            onClick={() => {
+              setAdding(!adding);
+              setForm(usageFormFromDraft(null));
+            }}
+          >
             <Plus />
-            添加来源
+            {t("连接用量来源")}
           </Button>
         </div>
       </div>
@@ -132,6 +153,33 @@ export function UsageWorkspace() {
           {error}
         </p>
       )}
+      {connection && (
+        <div
+          role="status"
+          className="rounded-xl border border-line bg-card p-4 text-sm"
+          data-usage-connection={connection.verified ? "connected" : "saved"}
+        >
+          <strong>
+            {connection.verified ? t("已连接并完成首次采集") : t("来源已保存，连接尚未成功")}
+          </strong>
+          <p className="mt-1 break-words text-muted">
+            {connection.name}
+            {connection.error ? `：${connection.error}` : ""}
+          </p>
+          {!connection.verified && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="mt-3"
+              disabled={busy}
+              onClick={() => void refresh(connection.id)}
+            >
+              {t("重试连接")}
+            </Button>
+          )}
+        </div>
+      )}
       {adding && (
         <form
           className="usage-form"
@@ -139,21 +187,18 @@ export function UsageWorkspace() {
             e.preventDefault();
             setBusy(true);
             try {
-              await desktop()!.usage.add(form);
-              setAdding(false);
-              setForm({
-                name: "",
-                type: "3x-ui",
-                url: "",
-                username: "",
-                password: "",
-                apiKey: "",
-                inboundId: "",
-                clientEmail: "",
-                nodeId: "",
+              const result = await saveAndVerifyUsageSource(desktop()!.usage, form);
+              setConnection({
+                id: result.source.id,
+                name: result.source.name,
+                verified: result.verified,
+                error: result.error,
               });
+              setAdding(false);
+              setForm(usageFormFromDraft(null));
               await load();
-              toast.success("来源已保存，请刷新采集");
+              if (result.verified) toast.success(t("已连接并完成首次采集"));
+              else toast.error(t("来源已保存，可重试连接"));
             } catch (err) {
               toast.error(errorText(err));
             } finally {
@@ -161,7 +206,23 @@ export function UsageWorkspace() {
             }
           }}
         >
-          <h3 className="font-semibold">连接用量来源</h3>
+          <h3 className="font-semibold">{t("连接用量来源")}</h3>
+          <p className="text-sm text-muted">
+            {t("选择来源，填写连接信息。保存后会验证一次，凭据加密保存在本机。")}
+          </p>
+          {form.nodeId && (
+            <p className="rounded-md bg-canvas p-3 text-sm">
+              {t("关联节点")}:{" "}
+              {servers
+                .flatMap((server) =>
+                  (server.nodes ?? []).map((node) => ({
+                    id: `${server.id}:${node.id}`,
+                    name: `${server.name} / ${node.name}`,
+                  })),
+                )
+                .find((node) => node.id === form.nodeId)?.name ?? t("节点已移除")}
+            </p>
+          )}
           <div className="grid gap-4 sm:grid-cols-2">
             <label>
               来源名称
@@ -175,7 +236,11 @@ export function UsageWorkspace() {
               类型
               <select
                 value={form.type}
-                onChange={(e) => setForm({ ...form, type: e.target.value })}
+                onChange={(e) => {
+                  const next = usageFormFromDraft({ type: e.target.value, name: form.name });
+                  if (["3x-ui", "subscription"].includes(next.type)) next.nodeId = form.nodeId;
+                  setForm(next);
+                }}
               >
                 {Object.entries(names)
                   .filter(([key]) => key !== "oauth")
@@ -220,20 +285,25 @@ export function UsageWorkspace() {
                     onChange={(e) => setForm({ ...form, password: e.target.value })}
                   />
                 </label>
-                <label>
-                  入站 ID（可选）
-                  <input
-                    value={form.inboundId}
-                    onChange={(e) => setForm({ ...form, inboundId: e.target.value })}
-                  />
-                </label>
-                <label>
-                  客户端 Email（可选，精确匹配）
-                  <input
-                    value={form.clientEmail}
-                    onChange={(e) => setForm({ ...form, clientEmail: e.target.value })}
-                  />
-                </label>
+                <details className="sm:col-span-2 rounded-md border border-line p-3">
+                  <summary className="cursor-pointer text-sm">{t("高级筛选（可选）")}</summary>
+                  <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                    <label>
+                      入站 ID（可选）
+                      <input
+                        value={form.inboundId}
+                        onChange={(e) => setForm({ ...form, inboundId: e.target.value })}
+                      />
+                    </label>
+                    <label>
+                      客户端 Email（可选，精确匹配）
+                      <input
+                        value={form.clientEmail}
+                        onChange={(e) => setForm({ ...form, clientEmail: e.target.value })}
+                      />
+                    </label>
+                  </div>
+                </details>
               </>
             )}
             {form.type.endsWith("-api") && (
@@ -273,9 +343,17 @@ export function UsageWorkspace() {
           </div>
           <div className="flex gap-2">
             <Button type="submit" disabled={busy}>
-              保存来源
+              {busy ? t("正在保存并验证…") : t("保存并验证连接")}
             </Button>
-            <Button type="button" variant="outline" onClick={() => setAdding(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => {
+                setAdding(false);
+                setForm(usageFormFromDraft(null));
+              }}
+            >
               取消
             </Button>
           </div>
@@ -306,7 +384,12 @@ export function UsageWorkspace() {
                   <h3 className="truncate font-semibold">{source.name}</h3>
                   <p className="mt-1 text-xs text-muted">
                     {names[source.type]} ·{" "}
-                    {source.checkedAt ? new Date(source.checkedAt).toLocaleString() : "尚未采集"}
+                    {source.error
+                      ? t("连接需要处理")
+                      : source.checkedAt
+                        ? t("已连接")
+                        : t("已保存，尚未连接")}{" "}
+                    · {source.checkedAt ? new Date(source.checkedAt).toLocaleString() : "尚未采集"}
                   </p>
                   {source.nodeId && (
                     <p className="mt-1 text-xs text-muted">

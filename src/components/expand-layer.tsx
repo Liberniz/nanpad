@@ -1,4 +1,7 @@
 import { AssetDocuments } from "./asset-documents";
+const PhoneBindings = lazy(() =>
+  import("./phone-workspace").then((module) => ({ default: module.PhoneBindings })),
+);
 import {
   Activity,
   BookOpen,
@@ -10,7 +13,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AiCard, CertCard, DomainCard, MailCard, SecretCard, ServerCard } from "./asset-card";
 import { AccountPanel } from "./account-panel";
 import { MailStatus } from "./mail-status";
@@ -25,7 +28,7 @@ import { Button } from "./ui/button";
 import { cardRect, flipTransform, reduceMotion } from "@/lib/motion";
 import { PROBEABLE, type ProbeKind } from "@/lib/probes";
 import { useAppStore, type ExpandState } from "@/lib/store";
-import type { AssetKind, Server } from "@/lib/types";
+import type { AssetKind } from "@/lib/types";
 import { t } from "@/lib/i18n";
 
 const ENTER_MS = 340;
@@ -77,6 +80,7 @@ export function ExpandLayer() {
     const el = panel.current;
     if (el && !reduceMotion()) {
       const from = cardRect(visible.id) ?? visible.origin;
+      el.style.willChange = "transform, opacity";
       el.style.transition = `transform ${EXIT_MS}ms var(--ease-out), opacity ${EXIT_MS}ms ease-in`;
       el.style.transform = flipTransform(from, el.getBoundingClientRect());
       el.style.opacity = "0";
@@ -88,11 +92,19 @@ export function ExpandLayer() {
   useLayoutEffect(() => {
     const el = panel.current;
     if (!el || !visible || closing.current) return;
+    const settle = () => {
+      if (closing.current) return;
+      el.style.transform = "none";
+      el.style.willChange = "auto";
+      el.style.transition = "";
+    };
     if (reduceMotion()) {
+      settle();
       setShown(true);
       return;
     }
     const to = el.getBoundingClientRect();
+    el.style.willChange = "transform, opacity";
     el.style.transition = "none";
     el.style.transform = flipTransform(visible.origin, to);
     el.style.opacity = "0.25";
@@ -102,6 +114,15 @@ export function ExpandLayer() {
     el.style.transform = "translate3d(0, 0, 0) scale(1)";
     el.style.opacity = "1";
     setShown(true);
+    const timer = window.setTimeout(settle, ENTER_MS + 50);
+    const onEnd = (event: TransitionEvent) => {
+      if (event.target === el && event.propertyName === "transform") settle();
+    };
+    el.addEventListener("transitionend", onEnd);
+    return () => {
+      window.clearTimeout(timer);
+      el.removeEventListener("transitionend", onEnd);
+    };
   }, [visible]);
 
   useEffect(() => () => window.clearTimeout(exitTimer.current), []);
@@ -147,7 +168,7 @@ export function ExpandLayer() {
       />
       <div
         ref={panel}
-        className="anim-flip relative z-10 w-full max-w-2xl overflow-hidden rounded-2xl bg-card shadow-float"
+        className="relative z-10 w-full max-w-2xl overflow-hidden rounded-2xl bg-card shadow-float"
       >
         <div className="flex items-center justify-between border-b border-line px-4 py-3">
           <span className="text-meta font-medium text-muted">{t("资产详情")}</span>
@@ -274,7 +295,6 @@ export function ExpandLayer() {
                   <ExpandedBody kind={visible.kind} id={visible.id} />
                   <MetricHistory key={`metrics:${visible.id}`} serverId={visible.id} />
                   <AssetRelations key={`links:${visible.kind}:${visible.id}`} asset={visible} />
-                  <AssetDocuments asset={visible} />
                   <div ref={accountSection} tabIndex={-1} aria-label={t("凭据位置")}>
                     <AccountPanel
                       key={`${visible.kind}:${visible.id}`}
@@ -372,6 +392,9 @@ function ExpandedBody({ kind, id }: { kind: AssetKind; id: string }) {
               initialProvider={d.oauthProvider}
             />
           </div>
+          <Suspense fallback={<p className="p-4 text-sm text-muted">{t("正在加载…")}</p>}>
+            <PhoneBindings subscriptionId={d.id} />
+          </Suspense>
         </>
       ) : (
         <Missing />

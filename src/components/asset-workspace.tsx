@@ -94,7 +94,9 @@ function AssetTable({ rows }: { rows: AssetRow[] }) {
         sortingFn: (a, b) =>
           ({ offline: 0, warning: 1, online: 2 })[a.original.status] -
           { offline: 0, warning: 1, online: 2 }[b.original.status],
-        cell: ({ row }) => <StatusBadge status={row.original.status} />,
+        cell: ({ row }) => (
+          <StatusBadge status={row.original.status} pending={row.original.pending} />
+        ),
       },
       {
         accessorKey: "expires",

@@ -1,6 +1,7 @@
 export type Status = "online" | "warning" | "offline";
 
 export type ViewId =
+  | "phones"
   | "docs"
   | "usage"
   | "overview"
@@ -65,6 +66,7 @@ export interface BoundSecretItem {
 }
 
 export interface Server extends ProbeMeta, Taggable {
+  sshConfigured?: boolean;
   id: string;
   name: string;
   label: string;
@@ -190,7 +192,20 @@ export type AnyAsset =
   | { kind: "secret"; data: Secret }
   | { kind: "cert"; data: Certificate };
 
+export interface PhoneNumber {
+  id: string;
+  number: string;
+  label: string;
+  provider: string;
+  expiresAt: string;
+  notes: string;
+  subscriptionIds: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Snapshot {
+  phoneNumbers?: PhoneNumber[];
   mailFolders?: import("./mail-folders").MailFolder[];
   secretFolders?: import("./secret-folders").SecretFolder[];
   links?: import("./operations").AssetLink[];
