@@ -1,0 +1,66 @@
+name: macOS 构建（Apple Silicon）
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+concurrency:
+  group: mac-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  mac:
+    runs-on: macos-latest
+    timeout-minutes: 40
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: 安装 Electron 运行时
+        run: node node_modules/electron/install.js
+
+      - name: 生成 macOS 图标
+        run: |
+          mkdir -p iconset.iconset
+          for size in 16 32 128 256 512; do
+            sips -z $size $size build/icon.png --out iconset.iconset/icon_${size}x${size}.png
+            sips -z $((size*2)) $((size*2)) build/icon.png --out iconset.iconset/icon_${size}x${size}@2x.png
+          done
+          iconutil -c icns iconset.iconset -o build/icon.icns
+          rm -rf iconset.iconset
+
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run i18n:check
+      - run: npm run desktop:build
+
+      - name: 打包 dmg（Apple Silicon）
+        run: node scripts/package-desktop.mjs --mac dmg --arm64 --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 上传 dmg
+        uses: actions/upload-artifact@v4
+        with:
+          name: Nanpad-mac-arm64-dmg
+          path: release/v*/*.dmg
+          if-no-files-found: error
+
+      - name: 发布到 Release（仅 tag 触发）
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then echo "Version tag mismatch"; exit 1; fi
+          dmg=$(ls release/v$version/*.dmg | head -1)
+          (cd release/v$version && shasum -a 256 "$(basename "$dmg")" > SHA256SUMS-mac.txt)
+          gh release upload "$GITHUB_REF_NAME" "$dmg" "release/v$version/SHA256SUMS-mac.txt" --clobber
