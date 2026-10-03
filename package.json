@@ -159,6 +159,7 @@
     "files": [
       "electron/**/*",
       "dist-desktop/**/*",
+      "src/lib/tiptap-to-markdown.mjs",
       "package.json",
       "!electron/renderer/index.html",
       "!electron/**/*.test.mjs"
