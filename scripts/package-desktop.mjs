@@ -1,11 +1,16 @@
 import { cp, mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
+import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const stage = await mkdtemp(join(tmpdir(), "nanpad-package-"));
+// macOS 上 tmpdir() 返回的是软链路径（/var -> /private/var）；npm 用 --prefix
+// 拿到软链路径后内部会解析成真实路径，导致 lockfile 与 package.json 对不上
+// （npm ci 报大量 Missing from lock file）。统一用真实路径，且 npm 直接在
+// 暂存目录内执行，不再使用 --prefix。
+const stage = realpathSync(await mkdtemp(join(tmpdir(), "nanpad-package-")));
 const manifest = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
 const lock = JSON.parse(await readFile(join(root, "package-lock.json"), "utf8"));
 // React 界面已经被 Vite 打包，暂存区只安装主进程运行依赖及其传递依赖。
@@ -78,19 +83,9 @@ const config = {
 const configPath = join(stage, "builder.json");
 await writeFile(configPath, JSON.stringify(config, null, 2));
 try {
-  run(npmCli, [
-    "install",
-    "--package-lock-only",
-    "--prefix",
-    stage,
-    "--ignore-scripts",
-    "--no-audit",
-    "--no-fund",
-  ]);
+  run(npmCli, ["install", "--package-lock-only", "--ignore-scripts", "--no-audit", "--no-fund"]);
   run(npmCli, [
     "ci",
-    "--prefix",
-    stage,
     "--omit=dev",
     "--omit=optional",
     "--ignore-scripts",
