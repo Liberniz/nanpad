@@ -40,10 +40,11 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run i18n:check
-      - run: npm run desktop:build
 
       - name: 打包 dmg（Apple Silicon）
-        run: node scripts/package-desktop.mjs --mac dmg --arm64 --publish never
+        # 必须经由 npm 运行：package-desktop.mjs 要求 npm 注入的 npm_execpath。
+        # desktop:dist 已包含 desktop:build；额外参数透传给 electron-builder。
+        run: npm run desktop:dist -- --mac dmg --arm64 --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
