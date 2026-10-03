@@ -12,6 +12,7 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 import {
+  Cloud,
   Globe,
   Shield,
   Server,
@@ -45,6 +46,7 @@ const ICONS = {
   mail: Mail,
   ai: Sparkles,
   secret: KeyRound,
+  service: Cloud,
 };
 function GraphNode({ id, data, isConnectable }: NodeProps<AssetNode>) {
   const updateNodeInternals = useUpdateNodeInternals();

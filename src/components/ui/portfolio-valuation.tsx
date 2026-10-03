@@ -18,6 +18,7 @@ export function PortfolioValuationCard() {
     aiAssets,
     secrets,
     certs,
+    services: [],
   });
 
   return (

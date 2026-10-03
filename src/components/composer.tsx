@@ -23,6 +23,7 @@ import type {
   Mailbox,
   Secret,
   Server,
+  ServiceAsset,
   Snapshot,
 } from "@/lib/types";
 import { uid } from "@/lib/utils";
@@ -78,6 +79,7 @@ function ComposerBody({
   const aiAssets = useAppStore((s) => s.aiAssets);
   const secrets = useAppStore((s) => s.secrets);
   const certs = useAppStore((s) => s.certs);
+  const services = useAppStore((s) => s.services);
   // Reading the collections directly keeps `existing` referentially stable
   // between renders, which is what the reset effect below keys on.
   const existing = findAsset(kind, editingId, {
@@ -87,6 +89,7 @@ function ComposerBody({
     aiAssets,
     secrets,
     certs,
+    services,
   });
   const preset = useAppStore((s) => s.composerPreset);
   const [form, setForm] = useState<Record<string, string>>(() => ({
@@ -140,7 +143,10 @@ function ComposerBody({
     if (isDesktop()) {
       const sshDraft = kind === "server" ? sshDraftForSave(form, serverMode) : null;
       const sshCredential = sshDraft ? credentialFromForm(sshDraft) : null;
-      const account = accountFromForm(kind === "server" ? serverAccountDraft(form) : form);
+      const account = accountFromForm(
+        kind === "server" ? serverAccountDraft(form) : form,
+        kind === "secret" && form.kind !== "password",
+      );
       if (sshCredential || account) {
         const unlocked = await useVault.getState().require(t("保存账号与凭据需要先解锁密钥库。"));
         if (!unlocked) {
@@ -607,7 +613,9 @@ function kindFields(
             value={form.kind || "api"}
             onValueChange={(value) => set("kind", value)}
             options={[
-              { value: "password", label: t("网站账号 / 密码") },
+              // "password" is the stored kind value for website accounts;
+              // only the account identity is kept, never the password.
+              { value: "password", label: t("网站账号") },
               { value: "api", label: "API Key" },
               { value: "ssh", label: t("SSH 私钥") },
               { value: "token", label: "Token" },
@@ -631,6 +639,39 @@ function kindFields(
         F("tags", t("标签（逗号分隔）"), { span: true }),
         F("notes", t("说明"), { span: true, area: true }),
       ];
+    case "service":
+      return [
+        F("name", t("名称"), { span: true }),
+        F("url", t("服务地址（https://…）"), { span: true }),
+        F("provider", t("部署平台（如 Cloudflare / Vercel / 自建）")),
+        <Field key="serviceType" label={t("服务类型")}>
+          <Select
+            aria-label={t("服务类型")}
+            value={form.serviceType || "other"}
+            onValueChange={(value) => set("serviceType", value)}
+            options={[
+              { value: "worker", label: t("Cloudflare Worker") },
+              { value: "blog", label: t("博客") },
+              { value: "mail", label: t("邮箱服务") },
+              { value: "other", label: t("其他") },
+            ]}
+          />
+        </Field>,
+        <Field key="checkMethod" label={t("检测方式")}>
+          <Select
+            aria-label={t("检测方式")}
+            value={form.checkMethod || "http"}
+            onValueChange={(value) => set("checkMethod", value)}
+            options={[
+              { value: "http", label: t("HTTP 可达") },
+              { value: "keyword", label: t("关键词匹配") },
+            ]}
+          />
+        </Field>,
+        F("expectedKeyword", t("期望关键词（关键词匹配时必填）"), { span: true }),
+        F("tags", t("标签（逗号分隔）"), { span: true }),
+        F("notes", t("说明"), { span: true, area: true }),
+      ];
   }
 }
 
@@ -649,6 +690,8 @@ function findAsset(kind: AssetKind, id: string | null, s: Snapshot): unknown {
       return s.secrets.find((x) => x.id === id) ?? null;
     case "cert":
       return s.certs.find((x) => x.id === id) ?? null;
+    case "service":
+      return s.services.find((x) => x.id === id) ?? null;
   }
 }
 
@@ -705,6 +748,17 @@ function defaults(kind: AssetKind, existing: unknown): Record<string, string> {
       return { name: "", kind: "api", hint: "", tags: "", notes: "" };
     case "cert":
       return { cn: "", issuer: "Let's Encrypt", expiresAt: today, sans: "", tags: "", notes: "" };
+    case "service":
+      return {
+        name: "",
+        url: "https://",
+        provider: "",
+        serviceType: "other",
+        checkMethod: "http",
+        expectedKeyword: "",
+        tags: "",
+        notes: "",
+      };
   }
 }
 
@@ -871,6 +925,31 @@ function persist(
         probeError: prev?.probeError,
       };
       s.upsertCert(item);
+      break;
+    }
+    case "service": {
+      const prev = (existing as ServiceAsset | null) ?? null;
+      const checkMethod = form.checkMethod === "keyword" ? "keyword" : "http";
+      const item: ServiceAsset = {
+        id,
+        imageDataUrl: form.imageDataUrl || "",
+        name: form.name,
+        url: form.url.trim(),
+        provider: form.provider,
+        serviceType: (form.serviceType as ServiceAsset["serviceType"]) || "other",
+        checkMethod,
+        expectedKeyword:
+          checkMethod === "keyword" ? form.expectedKeyword.trim() || undefined : undefined,
+        tags: parseTags(form.tags ?? ""),
+        status: prev?.status ?? "online",
+        notes: form.notes,
+        lastCheckedAt: prev?.lastCheckedAt,
+        httpStatus: prev?.httpStatus,
+        responseMs: prev?.responseMs,
+        probedAt: prev?.probedAt,
+        probeError: prev?.probeError,
+      };
+      s.upsertService(item);
       break;
     }
   }

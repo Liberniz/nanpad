@@ -2629,3 +2629,18 @@ p {
 .text-\[11px\] {
   font-size: var(--text-2xs);
 }
+
+.document-markdown-input {
+  width: 100%;
+  min-height: 55vh;
+  resize: vertical;
+  background: transparent;
+  border: 0;
+  outline: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 14px;
+  line-height: 1.75;
+  color: inherit;
+  padding: 0;
+  overflow-wrap: anywhere;
+}

@@ -56,6 +56,7 @@ const snapshot: Snapshot = {
   mailboxes: [],
   aiAssets: [],
   certs: [],
+  services: [],
   links: [{ from: { kind: "domain", id: "shared" }, to: { kind: "server", id: "shared" } }],
 };
 

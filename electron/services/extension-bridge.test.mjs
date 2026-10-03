@@ -9,7 +9,6 @@ const CAPTURE = {
   url: "https://embedded:credential@example.test/reset/private?token=private#secret",
   title: "测试网站",
   username: "person@example.test",
-  password: "private-password-123!",
 };
 
 function send(port, path, options = {}) {
@@ -100,7 +99,7 @@ async function pair(value, origin = ORIGIN) {
   return { ...pairing, token: response.body.token };
 }
 
-function assertNoSecrets(value, secrets = [CAPTURE.password, "embedded", "reset/private"]) {
+function assertNoSecrets(value, secrets = ["embedded", "reset/private"]) {
   const serialized = JSON.stringify(value);
   for (const secret of secrets) assert.ok(!serialized.includes(secret));
 }
@@ -155,7 +154,6 @@ test("真实 HTTP 配对、核对元数据和一次性取出；响应与通知�
     url: "https://example.test/",
     title: CAPTURE.title,
     username: CAPTURE.username,
-    password: CAPTURE.password,
     source: "manual",
   });
   assert.throws(() => value.bridge.take(response.body.id), /已过期或已被处理/u);
@@ -186,7 +184,7 @@ test("自动采集标记：source=auto 全链路可见且回调不含密码，�
   ]);
   const taken = value.bridge.take(response.body.id);
   assert.equal(taken.source, "auto");
-  assert.equal(taken.password, CAPTURE.password);
+  assert.equal("password" in taken, false);
   // source 仅接受 "auto"：其他值按未知键处理，整包拒绝。
   const rejected = await send(value.port, "/v1/captures", {
     token: pairing.token,
@@ -467,10 +465,8 @@ test("请求字段严格校验，拒绝多余字段、空凭据及异常类型",
     { ...CAPTURE, username: "x".repeat(321) },
     { ...CAPTURE, username: "bad\nname" },
     { ...CAPTURE, username: {} },
-    { ...CAPTURE, password: "" },
-    { ...CAPTURE, password: "x".repeat(4097) },
-    { ...CAPTURE, password: 123 },
-    { url: CAPTURE.url, title: CAPTURE.title, username: CAPTURE.username },
+    // 密码字段已不再接受：任何 password 键都整包拒绝。
+    { ...CAPTURE, password: "no-longer-accepted" },
   ];
   for (const body of cases) {
     const response = await send(value.port, "/v1/captures", {
@@ -510,12 +506,12 @@ test("拒绝非 JSON、损坏 JSON、超过字节预算及带参数的路由", a
   assert.equal(malformed.status, 400);
   const oversized = await send(value.port, "/v1/captures", {
     token: pairing.token,
-    body: { ...CAPTURE, password: "大".repeat(6000) },
+    body: { ...CAPTURE, username: "大".repeat(6000) },
   });
   assert.equal(oversized.status, 413);
   const oversizedChunked = await send(value.port, "/v1/captures", {
     token: pairing.token,
-    body: { ...CAPTURE, password: "x".repeat(17000) },
+    body: { ...CAPTURE, username: "x".repeat(17000) },
     headers: { "Content-Length": undefined, "Transfer-Encoding": "chunked" },
   });
   assert.equal(oversizedChunked.status, 413);

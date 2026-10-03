@@ -250,6 +250,36 @@ test("三个渠道的测试消息仅使用官方地址且不包含用户数据",
   assert.equal(rig.checks.length, 0);
 });
 
+test("wxpusher 渠道校验 AppToken 与 UID 并发送到官方地址", async (t) => {
+  const rig = setup(t);
+  const WXPUSHER_TOKEN = "AT_abcdef1234567890";
+  // 坏凭据 / 坏目标全部拒绝
+  for (const patch of [
+    { provider: "wxpusher", token: "bad-token", destination: "UID_abc123" },
+    { provider: "wxpusher", token: WXPUSHER_TOKEN, destination: "not-a-uid" },
+    { provider: "wxpusher", token: WXPUSHER_TOKEN, destination: "UID_abc,http://evil" },
+    { provider: "wxpusher", token: WXPUSHER_TOKEN, destination: "" },
+  ])
+    await assert.rejects(rig.service.save({ ...rig.config, ...patch }));
+  const saved = await rig.service.save({
+    ...rig.config,
+    provider: "wxpusher",
+    token: WXPUSHER_TOKEN,
+    destination: "UID_abc123, UID_def456",
+    enabled: false,
+  });
+  assert.equal(saved.hasToken, true);
+  assert.deepEqual(await rig.service.test(), { ok: true });
+  const request = rig.requests.at(-1);
+  assert.equal(new URL(request.url).hostname, "wxpusher.zjiecode.com");
+  assert.equal(new URL(request.url).protocol, "https:");
+  assert.equal(request.body.appToken, WXPUSHER_TOKEN);
+  assert.equal(request.body.contentType, 1);
+  assert.deepEqual(request.body.uids, ["UID_abc123", "UID_def456"]);
+  assert.match(request.init.body, /推送测试/);
+  assert.doesNotMatch(request.init.body, /private@example|another@example/);
+});
+
 test("HTTP 成功但服务商业务失败时仍报告脱敏错误", async (t) => {
   let json = { ok: false, description: TELEGRAM_TOKEN };
   const rig = setup(t, { fetchImpl: async () => ({ ok: true, json: async () => json }) });

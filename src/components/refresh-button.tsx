@@ -10,8 +10,13 @@ import { cn } from "@/lib/utils";
 import { useVault } from "@/lib/vault-state";
 import { t } from "@/lib/i18n";
 
-const NEEDS_VAULT: Record<ProbeKind, boolean> = { server: true, domain: false, cert: false };
-const LABEL: Record<ProbeKind, string> = { server: "主机", domain: "域名", cert: "证书" };
+const NEEDS_VAULT: Record<ProbeKind, boolean> = {
+  server: true,
+  domain: false,
+  cert: false,
+  service: false,
+};
+const LABEL: Record<ProbeKind, string> = { server: "主机", domain: "域名", cert: "证书", service: "服务" };
 
 /** Probe every asset of one kind. Hidden entirely in the web preview. */
 export function RefreshAllButton({ kind }: { kind: ProbeKind | null }) {

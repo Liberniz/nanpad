@@ -191,6 +191,10 @@ contextBridge.exposeInMainWorld("sinan", {
     probe: (name) => unwrap(ipcRenderer.invoke("domain:probe", name)),
   },
 
+  service: {
+    probe: (input) => unwrap(ipcRenderer.invoke("service:probe", input)),
+  },
+
   cert: {
     probe: (host, port, servername) =>
       unwrap(ipcRenderer.invoke("cert:probe", host, port, servername)),

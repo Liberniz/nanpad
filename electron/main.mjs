@@ -31,7 +31,7 @@ import { readFile, writeFile, rename, mkdir, stat, readdir, rm } from "node:fs/p
 import { dirname, join, posix } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SshManager } from "./services/ssh.mjs";
-import { probeCertificate, probeDomain } from "./services/net-probe.mjs";
+import { probeCertificate, probeDomain, probeService } from "./services/net-probe.mjs";
 import { MAIL_PROVIDERS, providerForAddress, testMailbox } from "./services/mail.mjs";
 import { MailboxService, validateMailboxConnection } from "./services/mailbox-service.mjs";
 import { MailPushService } from "./services/mail-push.mjs";
@@ -95,7 +95,14 @@ let quitting = false;
 let notificationTimer;
 let mailPushTimer;
 let currentSnapshot = {};
-let preferences = { closeToTray: true, notifications: true, locale: "zh", zoomPercent: 100 };
+let preferences = {
+  closeToTray: true,
+  notifications: true,
+  locale: "zh",
+  zoomPercent: 100,
+  // 0 = manual only. The old 90s hardcoded sweep is gone; see app-shell.
+  probeIntervalMinutes: 0,
+};
 const tracker = new NotificationTracker();
 const writes = new Map();
 const captures = new CaptureQueue();
@@ -705,6 +712,12 @@ function registerIpc() {
     if (typeof patch?.closeToTray === "boolean") safe.closeToTray = patch.closeToTray;
     if (typeof patch?.notifications === "boolean") safe.notifications = patch.notifications;
     if (patch?.locale === "zh" || patch?.locale === "en") safe.locale = patch.locale;
+    // 0 = manual only; anything else must be one of the offered steps.
+    if (
+      Number.isInteger(patch?.probeIntervalMinutes) &&
+      [0, 5, 15, 30, 60].includes(patch.probeIntervalMinutes)
+    )
+      safe.probeIntervalMinutes = patch.probeIntervalMinutes;
     return savePreferences(safe);
   });
   handle("metrics:list", (id, since) => metrics.list(id, Number.isFinite(since) ? since : 0));
@@ -863,6 +876,7 @@ function registerIpc() {
 
   // ---- network probes -----------------------------------------------------
   handle("domain:probe", (name) => probeDomain(name));
+  handle("service:probe", (input) => probeService(input));
   handle("cert:probe", (host, port, servername) => probeCertificate(host, port, servername));
   handle("cert:parse-pem", async (pem) => {
     const cert = new X509Certificate(pem);
@@ -1016,6 +1030,11 @@ if (!app.requestSingleInstanceLock()) {
         if (typeof saved[key] === "boolean") preferences[key] = saved[key];
       if (["zh", "en"].includes(saved.locale)) preferences.locale = saved.locale;
       preferences.zoomPercent = readZoomPercent(saved.zoomPercent);
+      if (
+        Number.isInteger(saved.probeIntervalMinutes) &&
+        [0, 5, 15, 30, 60].includes(saved.probeIntervalMinutes)
+      )
+        preferences.probeIntervalMinutes = saved.probeIntervalMinutes;
     } catch (err) {
       if (err.code !== "ENOENT") console.error("preferences:load", err.message);
     }

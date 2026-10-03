@@ -7,21 +7,7 @@ import { DocumentsStore, normalizeDocument, documentLink } from "./documents.mjs
 const doc = () => ({
   id: "doc-test",
   title: "部署说明",
-  content: {
-    type: "doc",
-    content: [
-      {
-        type: "paragraph",
-        content: [
-          {
-            type: "text",
-            text: "查看文档",
-            marks: [{ type: "link", attrs: { href: "https://example.com" } }],
-          },
-        ],
-      },
-    ],
-  },
+  content: "# 部署说明\n\n[查看文档](https://example.com)\n",
   bindings: [],
 });
 test("文档独立保存、跨重启读取、多资产绑定和解除", async () => {
@@ -29,7 +15,7 @@ test("文档独立保存、跨重启读取、多资产绑定和解除", async ()
   try {
     const store = new DocumentsStore(dir);
     const saved = await store.save(doc());
-    assert.equal((await store.list())[0].excerpt, "查看文档");
+    assert.equal((await store.list())[0].excerpt, "部署说明 查看文档");
     await store.save({
       ...saved,
       bindings: [
@@ -64,21 +50,18 @@ test("文档并发写入有序，失败不会阻塞后续保存", async () => {
     await rm(dir, { recursive: true, force: true });
   }
 });
-test("文档拒绝危险链接、外部图片、脚本和路径穿越", () => {
+test("文档拒绝危险链接、外部图片、非文本正文和路径穿越", () => {
   assert.equal(documentLink("javascript:alert(1)"), null);
   assert.equal(documentLink("https://user:pass@example.com"), null);
   assert.throws(() => normalizeDocument({ ...doc(), id: "doc-../../secret" }));
+  assert.throws(() => normalizeDocument({ ...doc(), content: { type: "doc" } }));
+  assert.throws(() => normalizeDocument({ ...doc(), content: "[x](javascript:alert(1))" }));
   assert.throws(() =>
-    normalizeDocument({ ...doc(), content: { type: "doc", content: [{ type: "script" }] } }),
+    normalizeDocument({ ...doc(), content: "![a](https://example.com/a.png)" }),
   );
-  assert.throws(() =>
-    normalizeDocument({
-      ...doc(),
-      content: {
-        type: "doc",
-        content: [{ type: "image", attrs: { src: "https://example.com/a.png" } }],
-      },
-    }),
+  // 代码块里的写法是字面文本，不应被校验拦截。
+  assert.doesNotThrow(() =>
+    normalizeDocument({ ...doc(), content: "```\n![a](https://example.com/a.png)\n```" }),
   );
 });
 test("文档图片保存保留真实 PNG 与摘要", async () => {
@@ -87,12 +70,9 @@ test("文档图片保存保留真实 PNG 与摘要", async () => {
     const store = new DocumentsStore(dir);
     const src =
       "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aZZkAAAAASUVORK5CYII=";
-    await store.save({
-      ...doc(),
-      content: { type: "doc", content: [{ type: "image", attrs: { src } }] },
-    });
+    await store.save({ ...doc(), content: `# 图\n\n![pixel](${src})\n` });
     assert.equal((await store.list())[0].imageCount, 1);
-    assert.equal((await store.get("doc-test")).content.content[0].attrs.src, src);
+    assert.match((await store.get("doc-test")).content, /!\[pixel\]\(data:image\/png/);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

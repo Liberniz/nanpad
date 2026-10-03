@@ -2,14 +2,15 @@ import { migrateServerDocument } from "./document-migration.mjs";
 import { uploadImage } from "./image-bed";
 import { inspectRaster } from "../../electron/services/image-data.mjs";
 import { create } from "zustand";
-import type { JSONContent } from "@tiptap/react";
 import type { AssetRef } from "./operations";
 import { desktop } from "./desktop";
+import { normalizeContent, countMarkdownImages, markdownExcerpt } from "./markdown-doc";
 
 export interface DocumentAsset {
   id: string;
+  /** Markdown source, standard CommonMark/GFM. */
   title: string;
-  content: JSONContent;
+  content: string;
   bindings: AssetRef[];
   createdAt: string;
   updatedAt: string;
@@ -52,22 +53,15 @@ function api() {
   return desktop()?.documents ?? local;
 }
 export function summary(doc: DocumentAsset): DocumentSummary {
-  const texts: string[] = [];
-  let imageCount = 0;
-  const walk = (node: JSONContent) => {
-    if (node.text) texts.push(node.text);
-    if (node.type === "image") imageCount++;
-    node.content?.forEach(walk);
-  };
-  walk(doc.content);
+  const markdown = normalizeContent(doc.content, doc.id);
   return {
     id: doc.id,
     title: doc.title,
     bindings: doc.bindings,
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
-    excerpt: texts.join(" ").slice(0, 180),
-    imageCount,
+    excerpt: markdownExcerpt(markdown),
+    imageCount: countMarkdownImages(markdown),
   };
 }
 interface State {
@@ -101,7 +95,9 @@ export const useDocuments = create<State>((set, get) => ({
   async open(id) {
     const existing = get().selected;
     if (existing && get().status[existing] !== "saved") await get().flush(existing);
-    const doc = get().drafts[id] ?? (await api().get(id));
+    const raw = get().drafts[id] ?? (await api().get(id));
+    // Legacy tiptap JSON is converted in-memory; the next save persists Markdown.
+    const doc = { ...raw, content: normalizeContent(raw.content, raw.id) };
     set((s) => ({
       selected: id,
       drafts: { ...s.drafts, [id]: doc },
@@ -115,7 +111,7 @@ export const useDocuments = create<State>((set, get) => ({
     const doc = await api().save({
       id: "doc-" + crypto.randomUUID(),
       title: initial?.title ?? "未命名文档",
-      content: initial?.content ?? { type: "doc", content: [{ type: "paragraph" }] },
+      content: normalizeContent(initial?.content ?? ""),
       bindings,
       createdAt: now,
       updatedAt: now,

@@ -6,6 +6,7 @@ import type {
   Mailbox,
   Secret,
   Server,
+  ServiceAsset,
   Snapshot,
 } from "./types";
 
@@ -417,6 +418,34 @@ export const SEED_CERTS: Certificate[] = [
   },
 ];
 
+export const SEED_SERVICES: ServiceAsset[] = [
+  {
+    id: "svc_worker",
+    demo: true,
+    tags: ["边缘", "生产"],
+    name: "签到 Worker",
+    url: "https://checkin.example.workers.dev/status",
+    provider: "Cloudflare",
+    serviceType: "worker",
+    checkMethod: "keyword",
+    expectedKeyword: "ok",
+    status: "online",
+    notes: "每天 17:00 定时签到。",
+  },
+  {
+    id: "svc_blog",
+    demo: true,
+    tags: ["个人"],
+    name: "个人博客",
+    url: "https://blog.example.com",
+    provider: "自建",
+    serviceType: "blog",
+    checkMethod: "http",
+    status: "online",
+    notes: "Hugo 静态站。",
+  },
+];
+
 export const SEED_ACTIVITY: ActivityItem[] = [
   {
     id: "act_1",
@@ -457,6 +486,7 @@ export const SEED_SNAPSHOT: Snapshot = {
   aiAssets: SEED_AI,
   secrets: SEED_SECRETS,
   certs: SEED_CERTS,
+  services: SEED_SERVICES,
 };
 
 /**
@@ -473,6 +503,7 @@ export const EMPTY_SNAPSHOT: Snapshot = {
   aiAssets: [],
   secrets: [],
   certs: [],
+  services: [],
 };
 
 function isoInDays(days: number): string {

@@ -90,7 +90,6 @@ export function CaptureInbox() {
           name: captured.title,
           _url: captured.url,
           _username: captured.username,
-          _password: captured.password,
           _captureId: captured.id,
         });
         setItems((list) => list.filter((entry) => entry.id !== item.id));

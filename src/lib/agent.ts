@@ -118,6 +118,17 @@ function index(snapshot: Snapshot): Candidate[] {
     ...snapshot.certs.map((s) =>
       make(s.id, "cert", s.cn, s.issuer, s.status, [s.issuer, s.host, ...s.sans], tagsOf(s)),
     ),
+    ...snapshot.services.map((s) =>
+      make(
+        s.id,
+        "service",
+        s.name,
+        s.url,
+        s.status,
+        [s.url, s.provider, s.expectedKeyword],
+        tagsOf(s),
+      ),
+    ),
   ];
 }
 
@@ -129,6 +140,7 @@ const KIND_HINTS: Array<[RegExp, AssetKind]> = [
   [/证书|ssl|tls|cert/i, "cert"],
   [/订阅|会员|ai\b|api/i, "ai"],
   [/密钥|秘钥|key|token/i, "secret"],
+  [/服务|worker|博客|blog/i, "service"],
 ];
 
 function hintedKind(query: string): AssetKind | null {
@@ -302,7 +314,7 @@ export function ask(query: string, snapshot: Snapshot): Answer {
 
   switch (intent.name) {
     case "secret":
-      return answerSecret(text, intent.field, matches);
+      return answerSecret(text, intent.field, matches, snapshot);
     case "connect":
       return answerConnect(matches);
     case "expiry":
@@ -322,7 +334,12 @@ export function ask(query: string, snapshot: Snapshot): Answer {
   }
 }
 
-function answerSecret(query: string, field: SecretField, matches: Candidate[]): Answer {
+function answerSecret(
+  query: string,
+  field: SecretField,
+  matches: Candidate[],
+  snapshot: Snapshot,
+): Answer {
   if (matches.length === 0) {
     return {
       blocks: [
@@ -353,6 +370,21 @@ function answerSecret(query: string, field: SecretField, matches: Candidate[]): 
   }
 
   const hit = matches[0];
+  if (field === "password" && !storesSecretValue(hit, snapshot)) {
+    // Website and console accounts keep no password — only the account
+    // identity. Real secrets (API key / SSH key / token) still answer below.
+    return {
+      blocks: [
+        {
+          type: "text",
+          text: t(
+            "司南只记录账号，不保存登录密码 —— 密码请去你的密码管理器（如 Bitwarden）里找。",
+          ),
+        },
+      ],
+      needsVault: false,
+    };
+  }
   return {
     blocks: [
       {
@@ -364,6 +396,12 @@ function answerSecret(query: string, field: SecretField, matches: Candidate[]): 
     ],
     needsVault: true,
   };
+}
+
+/** Only `secret` assets of kind api/ssh/token keep a retrievable secret value. */
+function storesSecretValue(hit: { id: string; kind: AssetKind }, snapshot: Snapshot): boolean {
+  if (hit.kind !== "secret") return false;
+  return snapshot.secrets.find((s) => s.id === hit.id)?.kind !== "password";
 }
 
 /** Two candidates are "equally strong" when neither clearly names the asset. */

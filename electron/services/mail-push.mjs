@@ -1,5 +1,5 @@
 const RECORD = "notification:mail-push";
-const PROVIDERS = new Set(["telegram", "serverchan", "wecom"]);
+const PROVIDERS = new Set(["telegram", "serverchan", "wecom", "wxpusher"]);
 const DEFAULTS = Object.freeze({
   enabled: false,
   provider: "telegram",
@@ -26,8 +26,26 @@ function validateToken(provider, token) {
       ? /^\d{5,20}:[A-Za-z0-9_-]{20,200}$/.test(token)
       : provider === "serverchan"
         ? /^SCT[A-Za-z0-9_-]{10,250}$/.test(token)
-        : /^[A-Za-z0-9-]{10,200}$/.test(token);
+        : provider === "wxpusher"
+          ? /^AT_[A-Za-z0-9]{10,100}$/.test(token)
+          : /^[A-Za-z0-9-]{10,200}$/.test(token);
   if (!valid) throw new Error("推送凭据格式不正确，请填写对应渠道的 Token 或密钥。");
+}
+
+/** WxPusher 接收目标：一个或多个 UID_xxx，用逗号/分号/空格分隔。 */
+function parseWxPusherUids(destination) {
+  return destination
+    .split(/[,;，、\s]+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function validateWxPusherDestination(destination) {
+  const uids = parseWxPusherUids(destination);
+  if (!uids.length || uids.some((uid) => !/^UID_[A-Za-z0-9]{1,64}$/.test(uid))) {
+    throw new Error("WxPusher 目标需为 UID_xxx 格式，多个用逗号分隔。");
+  }
+  return uids;
 }
 
 function boundedCount(value) {
@@ -84,7 +102,8 @@ export class MailPushService {
     ) {
       throw new Error("Telegram 目标需为 Chat ID 或公开频道用户名。");
     }
-    if (provider !== "telegram" && destination)
+    if (provider === "wxpusher" && destination) validateWxPusherDestination(destination);
+    if (provider !== "telegram" && provider !== "wxpusher" && destination)
       throw new Error("此渠道使用密钥指定目标，无需填写目标地址。");
     if (
       !Array.isArray(input.mailboxIds) ||
@@ -131,7 +150,8 @@ export class MailPushService {
         ? ""
         : enteredToken || (targetChanged ? "" : (previous?.token ?? ""));
       if (token) validateToken(provider, token);
-      if (enabled && (!token || !mailboxIds.length || (provider === "telegram" && !destination))) {
+      const needsDestination = provider === "telegram" || provider === "wxpusher";
+      if (enabled && (!token || !mailboxIds.length || (needsDestination && !destination))) {
         throw new Error("启用前请填写推送凭据、目标并选择邮箱。");
       }
       const reset =
@@ -169,7 +189,8 @@ export class MailPushService {
     this.#controller = controller;
     try {
       const record = await this.#vault.get(RECORD);
-      if (!record?.token || (record.provider === "telegram" && !record.destination)) {
+      const needsDestination = record.provider === "telegram" || record.provider === "wxpusher";
+      if (!record?.token || (needsDestination && !record.destination)) {
         throw new Error("请先保存推送凭据和目标。");
       }
       await this.#send(
@@ -295,6 +316,15 @@ export class MailPushService {
     } else if (record.provider === "wecom") {
       url = `https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${encodeURIComponent(record.token)}`;
       body = { msgtype: "text", text: { content: text } };
+    } else if (record.provider === "wxpusher") {
+      url = "https://wxpusher.zjiecode.com/api/send/message";
+      body = {
+        appToken: record.token,
+        content: text,
+        contentType: 1,
+        summary: "司南 Nanpad 邮件提醒",
+        uids: parseWxPusherUids(record.destination),
+      };
     } else {
       throw new Error("请选择支持的推送渠道。");
     }
@@ -313,8 +343,10 @@ export class MailPushService {
           ? result?.ok === true
           : record.provider === "wecom"
             ? result?.errcode === 0
-            : result?.code === 0 &&
-              (!result.data || result.data.errno === undefined || result.data.errno === 0);
+            : record.provider === "wxpusher"
+              ? result?.code === 0
+              : result?.code === 0 &&
+                (!result.data || result.data.errno === undefined || result.data.errno === 0);
       if (!accepted) throw new Error("provider_rejected");
     } catch {
       throw new Error(

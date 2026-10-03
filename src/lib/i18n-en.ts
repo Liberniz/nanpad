@@ -716,6 +716,11 @@ export const EN: Record<string, string> = {
   "客户端 ID": "Client ID",
   "连接 {0}": "Connect to {0}",
   录入账号密码: "Store an account",
+  录入账号: "Store an account",
+  "查看或保存账号信息需要先解锁密钥库。": "Reading or saving account info needs the vault unlocked first.",
+  "查看已保存的账号信息需要先解锁密钥库。": "Viewing saved account info needs the vault unlocked first.",
+  "司南只记录账号，不保存登录密码 —— 密码请去你的密码管理器（如 Bitwarden）里找。":
+    "Nanpad records accounts only, never login passwords — find your passwords in your password manager (e.g. Bitwarden).",
   密钥库未解锁: "Vault is locked",
   密钥库已锁定: "Vault locked",
   凭据保存失败: "Could not save the credential",
@@ -931,10 +936,14 @@ export const EN: Record<string, string> = {
   "[2m正在连接 {0}@{1}:{2} …[0m": "[2mConnecting to {0}@{1}:{2} …[0m",
   "SSH 凭据、各服务账号密码与密钥完整值都存在这里。":
     "SSH credentials, per-service account passwords and full secret values all live here.",
+  "SSH 凭据、各服务账号与密钥完整值都存在这里。":
+    "SSH credentials, per-service accounts and full secret values all live here.",
   "登录验证通过 · 收件箱 {0} 封，未读 {1} 封":
     "Sign-in verified · {0} messages in the inbox, {1} unread",
   "只导出资产记录；账号密码与 SSH 凭据不会跟着出去。":
     "Exports asset records only; account passwords and SSH credentials do not come along.",
+  "只导出资产记录；账号与 SSH 凭据不会跟着出去。":
+    "Exports asset records only; accounts and SSH credentials do not come along.",
   "资产记录是明文 JSON，凭据在同目录下单独加密保存。":
     "Asset records are plain JSON; credentials are encrypted separately in the same folder.",
   "SSH 命令 · ssh config 片段 · 私钥": "SSH command · ssh config block · private key",
@@ -1049,6 +1058,10 @@ export const EN: Record<string, string> = {
   后台运行: "Background activity",
   关闭窗口后驻留托盘: "Keep running in the tray when closed",
   到期与离线系统通知: "Expiry and offline notifications",
+  "UID_xxx，多个用逗号分隔": "UID_xxx, separate multiple with commas",
+  服务器自动采集周期: "Server auto-probe interval",
+  仅手动: "Manual only",
+  "每 {0} 分钟": "Every {0} min",
   系统托盘不可用: "System tray unavailable",
   系统通知不可用: "System notifications unavailable",
   "指标记录失败：{0}": "Could not save measurements: {0}",
@@ -1610,6 +1623,11 @@ export const EN: Record<string, string> = {
     "Save deployment notes, plans, photos and reference links as documents. Linking assets is optional.",
   创建第一篇文档: "Create your first document",
   文档正文: "Document body",
+  "文档正文（Markdown）": "Document body (Markdown)",
+  "用 Markdown 记录…": "Write in Markdown…",
+  "暂无内容，切换到编辑写点什么。": "Nothing here yet — switch to edit and write something.",
+  编辑源码: "Edit source",
+  预览效果: "Preview",
   插入链接: "Insert link",
   插入图片: "Insert image",
   撤销: "Undo",
@@ -1631,4 +1649,19 @@ export const EN: Record<string, string> = {
   "删除这篇文档？关联的资产不会受影响。":
     "Delete this document? Linked assets will not be affected.",
   删除文档: "Delete document",
+  尚未检测: "Not checked yet",
+  "关键词：{0}": "Keyword: {0}",
+  上次检测: "Last checked",
+  "服务地址（https://…）": "Service URL (https://…)",
+  "部署平台（如 Cloudflare / Vercel / 自建）": "Platform (e.g. Cloudflare / Vercel / self-hosted)",
+  服务类型: "Service type",
+  博客: "Blog",
+  邮箱服务: "Mail service",
+  其他: "Other",
+  检测方式: "Check method",
+  "HTTP 可达": "HTTP reachable",
+  关键词匹配: "Keyword match",
+  "期望关键词（关键词匹配时必填）": "Expected keyword (required for keyword match)",
+  "还没有服务。点右上角「添加资产」把 Worker、博客或自建服务记进来。":
+    "No services yet. Hit “Add asset” at the top right to record a Worker, blog or self-hosted service.",
 };

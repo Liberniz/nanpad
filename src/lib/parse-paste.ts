@@ -76,6 +76,10 @@ export const PASTE_HINTS: Record<AssetKind, { detectors: string[]; hint: string 
     detectors: ["certificate", "url", "host-port"],
     hint: "证书 PEM · 网址",
   },
+  service: {
+    detectors: ["url"],
+    hint: "服务网址（Worker / 博客 / 自建服务）",
+  },
 };
 
 /**

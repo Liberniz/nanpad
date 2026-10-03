@@ -104,8 +104,8 @@ test("图床图片在文档和资产快照中保存与恢复，旧内嵌图片�
       },
     });
     assert.equal(
-      (await new DocumentsStore(dir).get("doc-hosted")).content.content[0].attrs.src,
-      url,
+      (await new DocumentsStore(dir).get("doc-hosted")).content,
+      `![部署截图](${url})\n\n![](${png})`,
     );
     assert.equal((await store.list())[0].imageCount, 2);
     assert.equal(

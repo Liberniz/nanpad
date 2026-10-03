@@ -314,7 +314,7 @@ function VaultSection() {
 
   return (
     <>
-      <Section title={t("密钥库")} hint={t("SSH 凭据、各服务账号密码与密钥完整值都存在这里。")}>
+      <Section title={t("密钥库")} hint={t("SSH 凭据、各服务账号与密钥完整值都存在这里。")}>
         <Row label={t("状态")} hint={exists ? undefined : t("第一次保存凭据时会让你设置主密码。")}>
           <span className={cn("chip", unlocked ? "chip-ok" : "chip-mute")}>
             {exists ? (unlocked ? t("已解锁") : t("已锁定")) : t("尚未创建")}
@@ -423,7 +423,7 @@ function DataSection() {
           </Button>
         </Row>
       )}
-      <Row label={t("导出 JSON")} hint={t("只导出资产记录；账号密码与 SSH 凭据不会跟着出去。")}>
+      <Row label={t("导出 JSON")} hint={t("只导出资产记录；账号与 SSH 凭据不会跟着出去。")}>
         <Button
           variant="outline"
           size="sm"

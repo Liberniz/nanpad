@@ -1,5 +1,6 @@
-// 内容脚本：开启「自动采集」后，在用户提交含密码的登录表单时读取账号密码，
-// 经后台服务转发到本机司南待确认队列。默认关闭；关闭时不监听任何表单事件。
+// 内容脚本：开启「自动采集」后，在用户提交含密码的登录表单时读取账号，
+// 经后台服务转发到本机司南待确认队列。只采集账号，不采集密码。
+// 默认关闭；关闭时不监听任何表单事件。
 // 令牌不进入页面；本脚本不读取 iframe、封闭 Shadow DOM 或浏览器密码库。
 (() => {
   if (window.__nanpadSubmitCapture) return;
@@ -57,7 +58,6 @@
       url: `${location.origin}/`,
       title: document.title,
       username,
-      password: passwordInput.value.slice(0, 4096),
     };
   }
 
@@ -96,7 +96,7 @@
   }
 
   async function deliver(capture) {
-    const key = `${capture.username}|${capture.password}`;
+    const key = `${capture.url}|${capture.username}`;
     if (sentKeys.has(key)) return; // 同一页面重复提交（连点/重试）只发送一次
     let reply;
     try {

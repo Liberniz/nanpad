@@ -17,6 +17,7 @@ const PLACEHOLDER: Record<AssetKind, string> = {
   ai: "sk-…（OpenAI / Anthropic / xAI 的密钥）\n或控制台网址",
   secret: "sk-… / ghp_… / AKIA…\n或一段私钥",
   cert: "-----BEGIN CERTIFICATE-----\n…",
+  service: "https://my-worker.xxx.workers.dev\n或博客 / 服务的网址",
 };
 
 /**

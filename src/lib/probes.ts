@@ -5,7 +5,7 @@ import { desktop, formatUptime } from "./desktop";
 import { useLive } from "./live";
 import { expiryStatus } from "./status";
 import { useAppStore } from "./store";
-import type { Certificate, Domain, Server, Status } from "./types";
+import type { Certificate, Domain, Server, ServiceAsset, Status } from "./types";
 
 /** Which assets have a probe in flight, so the UI can show it spinning. */
 interface ProbeState {
@@ -194,8 +194,60 @@ async function probeCert(cert: Certificate): Promise<void> {
 }
 
 /** Which asset kinds have something real to go and check. */
-export const PROBEABLE = ["server", "domain", "cert"] as const;
+export const PROBEABLE = ["server", "domain", "cert", "service"] as const;
 export type ProbeKind = (typeof PROBEABLE)[number];
+
+/**
+ * GET a service URL in the main process, optionally matching a keyword.
+ * No vault needed — service checks are unauthenticated by design.
+ */
+export function refreshService(service: ServiceAsset): Promise<void> {
+  return flights.run("service:" + service.id, () => probeService(service));
+}
+
+async function probeService(service: ServiceAsset): Promise<void> {
+  if (service.demo) return;
+  const bridge = desktop();
+  if (!bridge) return;
+  busy(service.id, true);
+  const store = useAppStore.getState();
+  try {
+    const probe = await bridge.service.probe({
+      url: service.url,
+      expectedKeyword:
+        service.checkMethod === "keyword" ? service.expectedKeyword || undefined : undefined,
+    });
+    const current = currentProbeAsset(useAppStore.getState().services, service, ["url"]);
+    if (!current) return;
+    const reachable = probe.httpStatus >= 200 && probe.httpStatus < 400;
+    const keywordOk = probe.keywordFound !== false;
+    store.upsertService({
+      ...current,
+      httpStatus: probe.httpStatus,
+      responseMs: probe.responseMs,
+      lastCheckedAt: probe.at,
+      status: !reachable ? "offline" : !keywordOk ? "warning" : "online",
+      probedAt: probe.at,
+      probeError: !reachable
+        ? `HTTP ${probe.httpStatus}`
+        : !keywordOk
+          ? "页面可达，但未找到期望关键词"
+          : undefined,
+    });
+  } catch (err) {
+    const current = currentProbeAsset(useAppStore.getState().services, service, ["url"]);
+    if (!current) return;
+    store.upsertService({
+      ...current,
+      status: "offline",
+      lastCheckedAt: new Date().toISOString(),
+      probedAt: new Date().toISOString(),
+      probeError: message(err),
+    });
+  } finally {
+    busy(service.id, false);
+  }
+}
 
 /** Refresh a single asset by kind and id — used by the detail sheet. */
 export async function refreshById(kind: ProbeKind, id: string): Promise<void> {
@@ -206,6 +258,9 @@ export async function refreshById(kind: ProbeKind, id: string): Promise<void> {
   } else if (kind === "domain") {
     const x = s.domains.find((v) => v.id === id);
     if (x) await refreshDomain(x);
+  } else if (kind === "service") {
+    const x = s.services.find((v) => v.id === id);
+    if (x) await refreshService(x);
   } else {
     const x = s.certs.find((v) => v.id === id);
     if (x) await refreshCert(x);
@@ -213,7 +268,9 @@ export async function refreshById(kind: ProbeKind, id: string): Promise<void> {
 }
 
 /** Refresh every asset of one kind, a few at a time so 30 hosts do not stampede. */
-export async function refreshAll(kind: "server" | "domain" | "cert"): Promise<number> {
+export async function refreshAll(
+  kind: "server" | "domain" | "cert" | "service",
+): Promise<number> {
   const bridge = desktop();
   if (!bridge) return 0;
   const s = useAppStore.getState();
@@ -222,7 +279,9 @@ export async function refreshAll(kind: "server" | "domain" | "cert"): Promise<nu
       ? s.servers.filter((x) => !x.demo && canProbeServer(x)).map((x) => () => refreshServer(x))
       : kind === "domain"
         ? s.domains.filter((x) => !x.demo).map((x) => () => refreshDomain(x))
-        : s.certs.filter((x) => !x.demo).map((x) => () => refreshCert(x));
+        : kind === "service"
+          ? s.services.filter((x) => !x.demo).map((x) => () => refreshService(x))
+          : s.certs.filter((x) => !x.demo).map((x) => () => refreshCert(x));
 
   const CONCURRENCY = 4;
   let cursor = 0;

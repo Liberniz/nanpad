@@ -173,3 +173,61 @@ function guessDnsProvider(nameservers) {
   for (const [re, label] of table) if (re.test(joined)) return label;
   return nameservers[0]?.split(".").slice(-2).join(".") ?? "未知";
 }
+
+/**
+ * Check a service-type asset (Cloudflare Worker, blog, self-hosted mailbox…)
+ * with a plain HTTPS GET. Optionally verify the body contains an expected
+ * keyword. 10s timeout; no credentials ever leave the machine.
+ */
+export async function probeService(input) {
+  const url = String(input?.url ?? "").trim();
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error("服务地址无效");
+  }
+  if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("服务地址只支持 HTTP/HTTPS");
+  const expectedKeyword = String(input?.expectedKeyword ?? "");
+  const startedAt = Date.now();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10_000);
+  try {
+    const response = await fetch(parsed.href, {
+      redirect: "follow",
+      signal: controller.signal,
+      headers: { "User-Agent": "Nanpad service check" },
+    });
+    const responseMs = Date.now() - startedAt;
+    let keywordFound;
+    if (expectedKeyword) {
+      // Cap the body we scan: a health check should not download megabytes.
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let text = "";
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          text += decoder.decode(value, { stream: true });
+          if (text.length > 1_000_000 || text.includes(expectedKeyword)) break;
+        }
+      } finally {
+        await reader.cancel().catch(() => {});
+      }
+      keywordFound = text.includes(expectedKeyword);
+    }
+    return {
+      ok: true,
+      httpStatus: response.status,
+      responseMs,
+      keywordFound,
+      at: new Date().toISOString(),
+    };
+  } catch (error) {
+    if (controller.signal.aborted) throw new Error("连接超时（10 秒）");
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}

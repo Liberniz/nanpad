@@ -13,6 +13,17 @@ export function notificationCandidates(snapshot, now = Date.now()) {
         reason: "offline",
       });
   }
+  for (const s of snapshot.services ?? []) {
+    if (s.demo) continue;
+    if (s.status === "offline")
+      out.push({
+        key: `service:${s.id}`,
+        kind: "service",
+        id: s.id,
+        name: s.name,
+        reason: "offline",
+      });
+  }
   for (const [kind, list] of [
     ["domain", snapshot.domains],
     ["cert", snapshot.certs],

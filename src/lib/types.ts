@@ -12,11 +12,12 @@ export type ViewId =
   | "ai"
   | "vault"
   | "certs"
+  | "services"
   | "tags"
   | "agent"
   | "terminal";
 
-export type AssetKind = "server" | "domain" | "mail" | "ai" | "secret" | "cert";
+export type AssetKind = "server" | "domain" | "mail" | "ai" | "secret" | "cert" | "service";
 
 /** How the desktop app authenticates to a host. The secret itself is in the vault. */
 export type AuthKind = "password" | "key" | "agent";
@@ -177,6 +178,30 @@ export interface Certificate extends ProbeMeta, Taggable {
   protocol?: string;
 }
 
+/** A service-type asset: not a host you SSH into, but something you visit —
+ *  a Cloudflare Worker, a personal blog, a self-hosted mailbox, a status page.
+ *  Health is checked with a plain HTTPS GET, optionally with a keyword match. */
+export type ServiceType = "worker" | "blog" | "mail" | "other";
+export type ServiceCheckMethod = "http" | "keyword";
+
+export interface ServiceAsset extends ProbeMeta, Taggable {
+  id: string;
+  name: string;
+  /** Public URL of the service, e.g. the worker's URL or https://blog.example.com. */
+  url: string;
+  /** Where it runs: cloudflare, vercel, self-hosted… free text. */
+  provider: string;
+  serviceType: ServiceType;
+  checkMethod: ServiceCheckMethod;
+  /** Required when checkMethod is "keyword": the response body must contain it. */
+  expectedKeyword?: string;
+  status: Status;
+  notes: string;
+  lastCheckedAt?: string;
+  httpStatus?: number;
+  responseMs?: number;
+}
+
 export interface ActivityItem {
   id: string;
   at: string;
@@ -190,7 +215,8 @@ export type AnyAsset =
   | { kind: "mail"; data: Mailbox }
   | { kind: "ai"; data: AiAsset }
   | { kind: "secret"; data: Secret }
-  | { kind: "cert"; data: Certificate };
+  | { kind: "cert"; data: Certificate }
+  | { kind: "service"; data: ServiceAsset };
 
 export interface PhoneNumber {
   id: string;
@@ -215,4 +241,5 @@ export interface Snapshot {
   aiAssets: AiAsset[];
   secrets: Secret[];
   certs: Certificate[];
+  services: ServiceAsset[];
 }

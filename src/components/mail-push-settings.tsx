@@ -111,6 +111,7 @@ export function MailPushSettings() {
               { value: "telegram", label: "Telegram" },
               { value: "serverchan", label: t("Server酱 / 微信") },
               { value: "wecom", label: t("企业微信群机器人") },
+              { value: "wxpusher", label: "WxPusher" },
             ]}
           />
         </Field>
@@ -127,13 +128,28 @@ export function MailPushSettings() {
             />
           </Field>
         )}
+        {config.provider === "wxpusher" && (
+          <Field label="UID">
+            <Input
+              aria-label="UID"
+              value={config.destination}
+              placeholder={t("UID_xxx，多个用逗号分隔")}
+              onChange={(event) => {
+                patch({ destination: event.target.value, hasToken: false });
+                setClearToken(!token);
+              }}
+            />
+          </Field>
+        )}
         <Field
           label={
             config.provider === "telegram"
               ? "Bot Token"
               : config.provider === "serverchan"
                 ? "SendKey"
-                : t("机器人 Key")
+                : config.provider === "wxpusher"
+                  ? "AppToken"
+                  : t("机器人 Key")
           }
         >
           <Input

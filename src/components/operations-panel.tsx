@@ -544,6 +544,10 @@ export function DesktopSettings() {
     try {
       const next = await desktop()!.preferences.set(patch);
       setPrefs((old) => ({ ...old, ...next }));
+      if (typeof patch.probeIntervalMinutes === "number") {
+        // The sweep timer in app-shell rebuilds itself from the new cadence.
+        window.dispatchEvent(new Event("nanpad:probe-interval-changed"));
+      }
     } catch (err) {
       setError(errorText(err));
     } finally {
@@ -577,6 +581,20 @@ export function DesktopSettings() {
               disabled={busy || prefs.notificationSupported === false}
               onChange={(e) => void save({ notifications: e.target.checked })}
             />
+          </label>
+          <label className="flex items-center justify-between gap-3 text-meta">
+            <span>{t("服务器自动采集周期")}</span>
+            <select
+              value={prefs.probeIntervalMinutes ?? 0}
+              disabled={busy}
+              onChange={(e) => void save({ probeIntervalMinutes: Number(e.target.value) })}
+            >
+              <option value={0}>{t("仅手动")}</option>
+              <option value={5}>{t("每 {0} 分钟", 5)}</option>
+              <option value={15}>{t("每 {0} 分钟", 15)}</option>
+              <option value={30}>{t("每 {0} 分钟", 30)}</option>
+              <option value={60}>{t("每 {0} 分钟", 60)}</option>
+            </select>
           </label>
           {prefs.trayAvailable === false && <p className="tool-error">{t("系统托盘不可用")}</p>}
           {prefs.notificationSupported === false && (

@@ -1,9 +1,7 @@
 import { uploadImage, type ImageBedStatus } from "@/lib/image-bed";
 import { ImageBedSettings } from "./image-bed-settings";
+import { Markdown } from "./markdown";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import Image from "@tiptap/extension-image";
 import {
   Bold,
   Italic,
@@ -14,8 +12,6 @@ import {
   Code2,
   Link2,
   ImagePlus,
-  Undo2,
-  Redo2,
   Plus,
   FileText,
   Search,
@@ -24,6 +20,8 @@ import {
   Trash2,
   X,
   Paperclip,
+  Eye,
+  Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useShallow } from "zustand/react/shallow";
@@ -164,6 +162,7 @@ function DocumentEditor({ doc }: { doc: DocumentAsset }) {
       aiAssets: s.aiAssets,
       secrets: s.secrets,
       certs: s.certs,
+      services: s.services,
     })),
   );
   const assets = assetEntries(snapshot);
@@ -193,108 +192,52 @@ function DocumentEditor({ doc }: { doc: DocumentAsset }) {
   const [retryFiles, setRetryFiles] = useState<File[]>([]);
   const [uploadProgress, setUploadProgress] = useState("");
   const uploadingRef = useRef(false);
-  const editor = useEditor({
-    extensions: [
-      StarterKit.configure({
-        heading: { levels: [1, 2, 3] },
-        link: { openOnClick: false, autolink: true, protocols: ["http", "https"] },
-      }),
-      Image.configure({
-        allowBase64: true,
-        HTMLAttributes: { referrerpolicy: "no-referrer", loading: "lazy" },
-      }),
-    ],
-    content: doc.content,
-    immediatelyRender: false,
-    editorProps: {
-      attributes: {
-        class: "document-prose",
-        role: "textbox",
-        "aria-label": t("文档正文"),
-        "aria-multiline": "true",
-      },
-      handleClick: (_view, _pos, event) => {
-        const anchor = (event.target as HTMLElement).closest("a");
-        if (anchor && (event.ctrlKey || event.metaKey)) {
-          event.preventDefault();
-          const href = anchor.getAttribute("href");
-          if (href && /^https?:\/\//i.test(href)) {
-            const bridge = desktop();
-            if (bridge) void bridge.openExternal(href).catch(fail);
-            else window.open(href, "_blank", "noopener,noreferrer");
-          }
-          return true;
-        }
-        return false;
-      },
-    },
-    onUpdate: ({ editor }) => {
-      const latest = useDocuments.getState().drafts[doc.id];
-      change({ ...latest, content: editor.getJSON() });
-    },
-  });
-  useEditorState({
-    editor,
-    selector: ({ editor }) =>
-      editor
-        ? {
-            bold: editor.isActive("bold"),
-            italic: editor.isActive("italic"),
-            heading: editor.isActive("heading"),
-            list: editor.isActive("bulletList"),
-            ordered: editor.isActive("orderedList"),
-            quote: editor.isActive("blockquote"),
-            code: editor.isActive("codeBlock"),
-            undo: editor.can().undo(),
-            redo: editor.can().redo(),
-          }
-        : null,
-  });
   const update = (patch: Partial<DocumentAsset>) =>
     change({ ...useDocuments.getState().drafts[doc.id], ...patch });
+  const [mode, setMode] = useState<"edit" | "preview">("edit");
+  const textRef = useRef<HTMLTextAreaElement>(null);
+  const currentContent = () => useDocuments.getState().drafts[doc.id]?.content ?? "";
+  /** Wrap the selection (or a placeholder) with a Markdown snippet. */
+  const insertSnippet = (before: string, after: string, placeholder = "") => {
+    const el = textRef.current;
+    const value = currentContent();
+    const start = el?.selectionStart ?? value.length;
+    const end = el?.selectionEnd ?? value.length;
+    const selected = value.slice(start, end) || placeholder;
+    update({ content: value.slice(0, start) + before + selected + after + value.slice(end) });
+    requestAnimationFrame(() => {
+      const target = textRef.current;
+      if (!target) return;
+      target.focus();
+      const pos = start + before.length + selected.length + after.length;
+      target.setSelectionRange(pos, pos);
+    });
+  };
+  /** Prefix every selected line, e.g. "- ", "> ", "## ". */
+  const prefixLines = (prefix: (index: number) => string) => {
+    const el = textRef.current;
+    const value = currentContent();
+    const start = el?.selectionStart ?? value.length;
+    const end = el?.selectionEnd ?? value.length;
+    const lineStart = value.lastIndexOf("\n", start - 1) + 1;
+    const rawEnd = value.indexOf("\n", end);
+    const lineEnd = rawEnd === -1 ? value.length : rawEnd;
+    const prefixed = value
+      .slice(lineStart, lineEnd)
+      .split("\n")
+      .map((line, index) => prefix(index) + line)
+      .join("\n");
+    update({ content: value.slice(0, lineStart) + prefixed + value.slice(lineEnd) });
+    requestAnimationFrame(() => textRef.current?.focus());
+  };
   const toolbar = [
-    {
-      label: "粗体",
-      Icon: Bold,
-      active: editor?.isActive("bold"),
-      run: () => editor?.chain().focus().toggleBold().run(),
-    },
-    {
-      label: "斜体",
-      Icon: Italic,
-      active: editor?.isActive("italic"),
-      run: () => editor?.chain().focus().toggleItalic().run(),
-    },
-    {
-      label: "标题",
-      Icon: Heading2,
-      active: editor?.isActive("heading"),
-      run: () => editor?.chain().focus().toggleHeading({ level: 2 }).run(),
-    },
-    {
-      label: "无序列表",
-      Icon: List,
-      active: editor?.isActive("bulletList"),
-      run: () => editor?.chain().focus().toggleBulletList().run(),
-    },
-    {
-      label: "有序列表",
-      Icon: ListOrdered,
-      active: editor?.isActive("orderedList"),
-      run: () => editor?.chain().focus().toggleOrderedList().run(),
-    },
-    {
-      label: "引用",
-      Icon: Quote,
-      active: editor?.isActive("blockquote"),
-      run: () => editor?.chain().focus().toggleBlockquote().run(),
-    },
-    {
-      label: "代码块",
-      Icon: Code2,
-      active: editor?.isActive("codeBlock"),
-      run: () => editor?.chain().focus().toggleCodeBlock().run(),
-    },
+    { label: "粗体", Icon: Bold, run: () => insertSnippet("**", "**", "粗体") },
+    { label: "斜体", Icon: Italic, run: () => insertSnippet("*", "*", "斜体") },
+    { label: "标题", Icon: Heading2, run: () => prefixLines(() => "## ") },
+    { label: "无序列表", Icon: List, run: () => prefixLines(() => "- ") },
+    { label: "有序列表", Icon: ListOrdered, run: () => prefixLines((i) => `${i + 1}. `) },
+    { label: "引用", Icon: Quote, run: () => prefixLines(() => "> ") },
+    { label: "代码块", Icon: Code2, run: () => insertSnippet("\n```\n", "\n```\n", "代码") },
   ];
   const insertImages = async (files: File[]) => {
     if (uploadingRef.current) return;
@@ -314,22 +257,7 @@ function DocumentEditor({ doc }: { doc: DocumentAsset }) {
       setUploadProgress(t("正在插入图片 {0} / {1}", index + 1, files.length));
       try {
         const src = await documentImage(file);
-        if (editor && !editor.isDestroyed && useDocuments.getState().selected === doc.id)
-          editor.chain().focus().setImage({ src, alt: file.name }).createParagraphNear().run();
-        else {
-          const latest = useDocuments.getState().drafts[doc.id];
-          if (latest)
-            change({
-              ...latest,
-              content: {
-                ...latest.content,
-                content: [
-                  ...(latest.content.content ?? []),
-                  { type: "image", attrs: { src, alt: file.name } },
-                ],
-              },
-            });
-        }
+        insertSnippet(`![${file.name}](${src})\n`, "", "");
         completed++;
         void useDocuments.getState().flush(doc.id).catch(fail);
       } catch (e) {
@@ -352,12 +280,14 @@ function DocumentEditor({ doc }: { doc: DocumentAsset }) {
     }
     if (uploadingRef.current) return;
     const sources = new Map<string, string>();
-    const walk = (node: import("@tiptap/react").JSONContent) => {
-      if (node.type === "image" && node.attrs?.src?.startsWith("data:image/"))
-        sources.set(node.attrs.src, node.attrs.alt ?? "image");
-      node.content?.forEach(walk);
-    };
-    walk(useDocuments.getState().drafts[doc.id].content);
+    const markdown = useDocuments.getState().drafts[doc.id]?.content ?? "";
+    // Skip fenced code blocks and inline code: those are literal text.
+    const prose = markdown
+      .replace(/```[\s\S]*?(```|$)/g, "")
+      .replace(/`[^`\n]*`/g, "");
+    for (const match of prose.matchAll(/!\[([^\]\n]*)\]\(\s*(data:image\/[^)\s]+)\s*\)/g)) {
+      sources.set(match[2], match[1] || "image");
+    }
     if (!sources.size) {
       fail(new Error("当前文档没有内嵌图片"));
       return;
@@ -375,19 +305,7 @@ function DocumentEditor({ doc }: { doc: DocumentAsset }) {
         const url = await uploadImage(source, name, "document");
         const latest = useDocuments.getState().drafts[doc.id];
         if (!latest) break;
-        const replace = (
-          node: import("@tiptap/react").JSONContent,
-        ): import("@tiptap/react").JSONContent => ({
-          ...node,
-          ...(node.type === "image" && node.attrs?.src === source
-            ? { attrs: { ...node.attrs, src: url } }
-            : {}),
-          ...(node.content ? { content: node.content.map(replace) } : {}),
-        });
-        const content = replace(latest.content);
-        change({ ...latest, content });
-        if (editor && !editor.isDestroyed && useDocuments.getState().selected === doc.id)
-          editor.commands.setContent(content, { emitUpdate: false });
+        change({ ...latest, content: latest.content.split(source).join(url) });
         await useDocuments.getState().flush(doc.id);
       }
     } catch (e) {
@@ -406,15 +324,8 @@ function DocumentEditor({ doc }: { doc: DocumentAsset }) {
     <div className="document-detail">
       <div className="document-toolbar">
         <div className="flex flex-wrap items-center gap-1">
-          {toolbar.map(({ label, Icon, active, run }) => (
-            <button
-              type="button"
-              key={label}
-              title={t(label)}
-              aria-label={t(label)}
-              aria-pressed={Boolean(active)}
-              onClick={run}
-            >
+          {toolbar.map(({ label, Icon, run }) => (
+            <button type="button" key={label} title={t(label)} aria-label={t(label)} onClick={run}>
               <Icon className="size-4" />
             </button>
           ))}
@@ -423,25 +334,30 @@ function DocumentEditor({ doc }: { doc: DocumentAsset }) {
             type="button"
             title={t("插入链接")}
             aria-label={t("插入链接")}
-            onClick={() => setLink(editor?.getAttributes("link").href ?? "")}
+            onClick={() => setLink("")}
           >
             <Link2 className="size-4" />
           </button>
+          <span className="mx-1 h-5 border-l border-line" />
           <button
             type="button"
-            aria-label={t("撤销")}
-            disabled={!editor?.can().undo()}
-            onClick={() => editor?.chain().focus().undo().run()}
+            title={t("编辑源码")}
+            aria-label={t("编辑源码")}
+            aria-pressed={mode === "edit"}
+            disabled={mode === "edit"}
+            onClick={() => setMode("edit")}
           >
-            <Undo2 className="size-4" />
+            <Pencil className="size-4" />
           </button>
           <button
             type="button"
-            aria-label={t("重做")}
-            disabled={!editor?.can().redo()}
-            onClick={() => editor?.chain().focus().redo().run()}
+            title={t("预览效果")}
+            aria-label={t("预览效果")}
+            aria-pressed={mode === "preview"}
+            disabled={mode === "preview"}
+            onClick={() => setMode("preview")}
           >
-            <Redo2 className="size-4" />
+            <Eye className="size-4" />
           </button>
         </div>
         <input
@@ -466,7 +382,7 @@ function DocumentEditor({ doc }: { doc: DocumentAsset }) {
           <Button
             type="button"
             size="sm"
-            disabled={uploading || !editor}
+            disabled={uploading}
             onClick={() => fileRef.current?.click()}
           >
             <ImagePlus />
@@ -510,11 +426,6 @@ function DocumentEditor({ doc }: { doc: DocumentAsset }) {
           </div>
         </details>
       </div>
-      {doc.id.startsWith("doc-legacy-server-") && (
-        <p className="border-b border-line px-4 py-3 text-sm text-muted">
-          {t("旧 Markdown 已原样保存在代码块中；原始记录继续保留在服务器文档页。")}
-        </p>
-      )}
       {uploadError && (
         <div
           role="alert"
@@ -554,18 +465,7 @@ function DocumentEditor({ doc }: { doc: DocumentAsset }) {
               const url = new URL(link);
               if (!["http:", "https:"].includes(url.protocol) || url.username || url.password)
                 throw new Error("链接只支持 HTTP 或 HTTPS");
-              if (editor?.state.selection.empty)
-                editor
-                  .chain()
-                  .focus()
-                  .insertContent({
-                    type: "text",
-                    text: link,
-                    marks: [{ type: "link", attrs: { href: url.href } }],
-                  })
-                  .run();
-              else
-                editor?.chain().focus().extendMarkRange("link").setLink({ href: url.href }).run();
+              insertSnippet("[", `](${url.href})`, url.href);
               setLink(null);
             } catch (err) {
               fail(err);
@@ -611,32 +511,46 @@ function DocumentEditor({ doc }: { doc: DocumentAsset }) {
               {t("更新于")} {new Date(doc.updatedAt).toLocaleString()}
             </span>
           </div>
-          <EditorContent
-            editor={editor}
-            onPasteCapture={(event) => {
-              const files = Array.from(event.clipboardData.files).filter((f) =>
-                f.type.startsWith("image/"),
-              );
-              if (files.length) {
-                event.preventDefault();
-                event.stopPropagation();
-                void insertImages(files);
-              }
-            }}
-            onDragOver={(event) => {
-              if (event.dataTransfer.types.includes("Files")) event.preventDefault();
-            }}
-            onDropCapture={(event) => {
-              const files = Array.from(event.dataTransfer.files).filter((f) =>
-                f.type.startsWith("image/"),
-              );
-              if (files.length) {
-                event.preventDefault();
-                event.stopPropagation();
-                void insertImages(files);
-              }
-            }}
-          />
+          {mode === "edit" ? (
+            <textarea
+              ref={textRef}
+              className="document-markdown-input"
+              aria-label={t("文档正文（Markdown）")}
+              aria-multiline="true"
+              placeholder={t("用 Markdown 记录…")}
+              value={doc.content}
+              onChange={(e) => update({ content: e.target.value })}
+              onPasteCapture={(event) => {
+                const files = Array.from(event.clipboardData.files).filter((f) =>
+                  f.type.startsWith("image/"),
+                );
+                if (files.length) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  void insertImages(files);
+                }
+              }}
+              onDragOver={(event) => {
+                if (event.dataTransfer.types.includes("Files")) event.preventDefault();
+              }}
+              onDropCapture={(event) => {
+                const files = Array.from(event.dataTransfer.files).filter((f) =>
+                  f.type.startsWith("image/"),
+                );
+                if (files.length) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  void insertImages(files);
+                }
+              }}
+            />
+          ) : (
+            <div className="document-prose">
+              <Markdown images="show">
+                {doc.content || t("暂无内容，切换到编辑写点什么。")}
+              </Markdown>
+            </div>
+          )}
         </article>
         <aside className="document-bindings">
           <h3 className="flex items-center gap-2 text-sm font-semibold">

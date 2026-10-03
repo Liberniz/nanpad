@@ -3,6 +3,7 @@ import { hasServerObservation, serverNeedsAttention } from "@/lib/server-observa
 import {
   AlertTriangle,
   Bot,
+  Cloud,
   Globe,
   KeyRound,
   Mail,
@@ -36,6 +37,7 @@ const KIND_ICON: Record<AssetKind | "system" | "phone", LucideIcon> = {
   ai: Bot,
   secret: KeyRound,
   cert: Shield,
+  service: Cloud,
   system: AlertTriangle,
   phone: Phone,
 };
@@ -48,6 +50,7 @@ const KIND_VIEW: Record<AssetKind | "phone", ViewId> = {
   ai: "ai",
   secret: "vault",
   cert: "certs",
+  service: "services",
 };
 
 interface Alert {

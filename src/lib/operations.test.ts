@@ -16,6 +16,7 @@ const empty: Snapshot = {
   mailboxes: [],
   aiAssets: [],
   secrets: [],
+  services: [],
 };
 test("批量标签只修改选中资产，保留其他字段与未选中记录，不污染原快照", () => {
   const snapshot = {

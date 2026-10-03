@@ -10,8 +10,8 @@ test("英文示例可识别密码、用量、支出和到期意图", () => {
   setLocale("en");
   try {
     const password = ask("What is the password for my 163 mailbox", SNAPSHOT);
-    assert.ok(password.needsVault);
-    assert.ok(password.blocks.some((b) => b.type === "secret" && b.assetId === "mail1"));
+    assert.equal(password.needsVault, false);
+    assert.match(firstText(password.blocks), /password manager|Bitwarden|不保存/);
     assert.ok(
       ask("What expires this month", SNAPSHOT).blocks.some(
         (b) => b.type === "rows" && b.rows.length === 2,
@@ -105,6 +105,7 @@ const SNAPSHOT: Snapshot = {
   ],
   secrets: [],
   certs: [],
+  services: [],
 };
 
 const types = (blocks: Block[]) => blocks.map((b) => b.type);
@@ -119,20 +120,59 @@ test("a partial Chinese name still finds the host", () => {
   assert.equal(action?.type === "action" && action.assetId, "srv1");
 });
 
-test("password question resolves the named mailbox and returns a reference", () => {
+test("password question for an account answers that passwords are not kept", () => {
   const { blocks, needsVault } = ask("我 163 那个邮箱的密码是多少", SNAPSHOT);
+  assert.equal(blocks.some((b) => b.type === "secret"), false);
+  assert.match(firstText(blocks), /不保存.*密码|Bitwarden/);
+  assert.equal(needsVault, false);
+});
+
+test("password question for a real secret still returns a reference", () => {
+  const snapshot: Snapshot = {
+    ...SNAPSHOT,
+    secrets: [
+      {
+        id: "sec1",
+        name: "OpenAI API",
+        kind: "api",
+        hint: "",
+        value: "",
+        lastRotated: "",
+        status: "online",
+        notes: "",
+        tags: [],
+      },
+    ],
+  };
+  const { blocks, needsVault } = ask("OpenAI 的密码是多少", snapshot);
   const secret = blocks.find((b) => b.type === "secret");
   assert.ok(secret && secret.type === "secret");
-  assert.equal(secret.assetId, "mail1");
+  assert.equal(secret.assetId, "sec1");
   assert.equal(secret.field, "password");
   assert.equal(needsVault, true);
 });
 
 test("the answer never carries a secret value, only a reference", () => {
-  const { blocks } = ask("billing 的密码", SNAPSHOT);
+  const snapshot: Snapshot = {
+    ...SNAPSHOT,
+    secrets: [
+      {
+        id: "sec1",
+        name: "Stripe",
+        kind: "api",
+        hint: "",
+        value: "",
+        lastRotated: "",
+        status: "online",
+        notes: "",
+        tags: [],
+      },
+    ],
+  };
+  const { blocks } = ask("Stripe 的密码", snapshot);
   const secret = blocks.find((b) => b.type === "secret");
   assert.ok(secret && secret.type === "secret");
-  assert.equal(secret.assetId, "mail2");
+  assert.equal(secret.assetId, "sec1");
   assert.deepEqual(Object.keys(secret).sort(), ["assetId", "field", "kind", "label", "type"]);
 });
 

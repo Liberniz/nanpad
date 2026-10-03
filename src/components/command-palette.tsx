@@ -1,6 +1,7 @@
 import { Command } from "cmdk";
 import {
   Bot,
+  Cloud,
   Phone,
   Globe,
   KeyRound,
@@ -28,6 +29,7 @@ const KIND_ICON: Record<AssetKind, LucideIcon> = {
   ai: Bot,
   secret: KeyRound,
   cert: Shield,
+  service: Cloud,
 };
 
 interface Entry {

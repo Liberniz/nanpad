@@ -19,6 +19,11 @@ export interface SshCredential {
 export interface AccountCredential {
   url?: string;
   username?: string;
+  /**
+   * @deprecated Website/account passwords are no longer recorded — use a
+   * password manager. Kept only so old vault records still read. For `secret`
+   * assets this field holds the secret value itself (API key / SSH key / token).
+   */
   password?: string;
   /** Recovery codes, API keys, 2FA backup — anything that needs more than a line. */
   note?: string;
@@ -78,6 +83,19 @@ export interface CertProbe {
   protocol?: string;
   trusted: boolean;
   untrustedReason?: string;
+  at: string;
+}
+
+export interface ServiceProbeInput {
+  url: string;
+  expectedKeyword?: string;
+}
+
+export interface ServiceProbe {
+  ok: true;
+  httpStatus: number;
+  responseMs: number;
+  keywordFound?: boolean;
   at: string;
 }
 
@@ -305,6 +323,7 @@ export interface DesktopBridge {
     }): Promise<OAuthResult>;
   };
   domain: { probe(name: string): Promise<DomainProbe> };
+  service: { probe(input: ServiceProbeInput): Promise<ServiceProbe> };
   cert: {
     probe(host: string, port?: number, servername?: string): Promise<CertProbe>;
     parsePem(pem: string): Promise<{
@@ -322,6 +341,11 @@ export interface DesktopPreferences {
   closeToTray: boolean;
   notifications: boolean;
   locale: "zh" | "en";
+  /**
+   * Server metric auto-probe interval in minutes.
+   * 0 means manual only: probe once on unlock, then only via the refresh buttons.
+   */
+  probeIntervalMinutes: number;
   notificationSupported?: boolean;
   trayAvailable?: boolean;
 }

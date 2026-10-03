@@ -89,7 +89,7 @@ try {
     ),
   );
   assert.equal(
-    original.content.content[0].content[0].text,
+    original.content,
     await page.evaluate(() => window.__legacyMarkdown),
   );
   await page.getByRole("textbox", { name: "文档标题", exact: true }).fill("修改后的运维记录");
@@ -208,7 +208,7 @@ try {
       .getState()
       .create([], {
         title: "图片回归文档",
-        content: { type: "doc", content: [{ type: "paragraph" }] },
+        content: "",
       });
     ReactDOM.createRoot(document.getElementById("document-test-root")).render(
       React.createElement(DocumentsWorkspace),

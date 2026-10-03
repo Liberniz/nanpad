@@ -13,6 +13,7 @@ import {
   SquareTerminal,
   Tags,
   Radio,
+  Cloud,
   Lock,
   Unlock,
   type LucideIcon,
@@ -39,7 +40,7 @@ export interface NavGroup {
     icon: LucideIcon;
     badgeKey?: keyof ReturnType<typeof attentionOf>;
     kind?: AssetKind;
-    countKey?: "servers" | "domains" | "mailboxes" | "aiAssets" | "secrets" | "certs" | "nodes";
+    countKey?: "servers" | "domains" | "mailboxes" | "aiAssets" | "secrets" | "certs" | "services" | "nodes";
   }[];
 }
 
@@ -79,6 +80,14 @@ export const NAV_GROUPS: NavGroup[] = [
         badgeKey: "certs",
         kind: "cert",
         countKey: "certs",
+      },
+      {
+        id: "services",
+        label: "服务",
+        icon: Cloud,
+        badgeKey: "services",
+        kind: "service",
+        countKey: "services",
       },
     ],
   },
@@ -132,6 +141,7 @@ export function Sidebar({ className, ...rest }: HTMLAttributes<HTMLElement>) {
   const aiAssets = useAppStore((s) => s.aiAssets);
   const secrets = useAppStore((s) => s.secrets);
   const certs = useAppStore((s) => s.certs);
+  const services = useAppStore((s) => s.services);
   const counts = useAppStore(useShallow(attentionOf));
 
   const totalNodesCount = useMemo(() => {
@@ -146,6 +156,7 @@ export function Sidebar({ className, ...rest }: HTMLAttributes<HTMLElement>) {
       aiAssets: aiAssets.length,
       secrets: secrets.length,
       certs: certs.length,
+      services: services.length,
       nodes: totalNodesCount,
     }),
     [
@@ -155,6 +166,7 @@ export function Sidebar({ className, ...rest }: HTMLAttributes<HTMLElement>) {
       aiAssets.length,
       secrets.length,
       certs.length,
+      services.length,
       totalNodesCount,
     ],
   );

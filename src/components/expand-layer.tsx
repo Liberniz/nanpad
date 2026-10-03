@@ -14,7 +14,7 @@ import {
   Zap,
 } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { AiCard, CertCard, DomainCard, MailCard, SecretCard, ServerCard } from "./asset-card";
+import { AiCard, CertCard, DomainCard, MailCard, SecretCard, ServerCard, ServiceCard } from "./asset-card";
 import { AccountPanel } from "./account-panel";
 import { MailStatus } from "./mail-status";
 import { AiAccountsPanel } from "./ai-accounts";
@@ -356,6 +356,7 @@ function ExpandedBody({ kind, id }: { kind: AssetKind; id: string }) {
   const aiAssets = useAppStore((s) => s.aiAssets);
   const secrets = useAppStore((s) => s.secrets);
   const certs = useAppStore((s) => s.certs);
+  const services = useAppStore((s) => s.services);
 
   switch (kind) {
     case "server": {
@@ -407,6 +408,10 @@ function ExpandedBody({ kind, id }: { kind: AssetKind; id: string }) {
     case "cert": {
       const d = certs.find((x) => x.id === id);
       return d ? <CertCard data={d} compact={false} /> : <Missing />;
+    }
+    case "service": {
+      const d = services.find((x) => x.id === id);
+      return d ? <ServiceCard data={d} compact={false} /> : <Missing />;
     }
   }
 }

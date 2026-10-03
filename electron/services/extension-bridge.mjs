@@ -50,11 +50,12 @@ function objectWithKeys(value, keys) {
 }
 
 function normalizeCredentialCapture(value) {
-  // source 是唯一的可选键：自动采集标记为 "auto"，其他值或不带该键都按手动采集处理。
+  // 只采集账号，不采集密码。source 是唯一的可选键：自动采集标记为
+  // "auto"，其他值或不带该键都按手动采集处理。
   const keys =
     value?.source === "auto"
-      ? ["url", "title", "username", "password", "source"]
-      : ["url", "title", "username", "password"];
+      ? ["url", "title", "username", "source"]
+      : ["url", "title", "username"];
   if (
     !objectWithKeys(value, keys) ||
     typeof value.url !== "string" ||
@@ -64,10 +65,7 @@ function normalizeCredentialCapture(value) {
     typeof value.username !== "string" ||
     value.username.length > 320 ||
     !value.username.trim() ||
-    /[\r\n\0]/u.test(value.username) ||
-    typeof value.password !== "string" ||
-    !value.password.length ||
-    value.password.length > 4096
+    /[\r\n\0]/u.test(value.username)
   ) {
     throw new RequestError(400, "账号信息格式不正确。");
   }
@@ -75,7 +73,6 @@ function normalizeCredentialCapture(value) {
     return {
       ...normalizeCapture(value),
       username: value.username.trim(),
-      password: value.password,
       ...(value.source === "auto" ? { source: "auto" } : {}),
     };
   } catch {
@@ -378,7 +375,6 @@ export class ExtensionBridge {
       url: item.url,
       title: item.title,
       username: item.username,
-      password: item.password,
       source: item.source === "auto" ? "auto" : "manual",
     };
   }

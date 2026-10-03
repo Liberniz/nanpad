@@ -122,17 +122,41 @@ export function AppShell() {
 
   // Real metric sweeps, but never before the vault is open: probing needs the
   // stored credentials, and a password prompt on launch would be rude.
+  //
+  // The cadence is user-configurable (settings → desktop): 0 means manual
+  // only — one sweep on unlock, then just the refresh buttons.
   useEffect(() => {
     if (!isDesktop() || !vaultUnlocked) return;
     let cancelled = false;
+    let timer: number | undefined;
     const sweep = () => {
       if (!cancelled && document.visibilityState === "visible") void refreshAll("server");
     };
-    sweep();
-    const t = window.setInterval(sweep, 90_000);
+    const start = async () => {
+      let minutes = 0;
+      try {
+        const prefs = await desktop()?.preferences.get();
+        if (typeof prefs?.probeIntervalMinutes === "number") minutes = prefs.probeIntervalMinutes;
+      } catch {
+        minutes = 0;
+      }
+      if (cancelled) return;
+      sweep();
+      if (minutes > 0) timer = window.setInterval(sweep, minutes * 60_000);
+    };
+    const restart = () => {
+      if (timer !== undefined) {
+        window.clearInterval(timer);
+        timer = undefined;
+      }
+      void start();
+    };
+    void start();
+    window.addEventListener("nanpad:probe-interval-changed", restart);
     return () => {
       cancelled = true;
-      window.clearInterval(t);
+      if (timer !== undefined) window.clearInterval(timer);
+      window.removeEventListener("nanpad:probe-interval-changed", restart);
     };
   }, [vaultUnlocked]);
 

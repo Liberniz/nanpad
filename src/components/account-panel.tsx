@@ -28,6 +28,10 @@ export function AccountPanel({ assetId, kind }: { assetId: string; kind: AssetKi
   const secretKind = useAppStore((s) => s.secrets.find((item) => item.id === assetId)?.kind);
   const copy =
     kind === "secret" && secretKind === "password" ? WEBSITE_ACCOUNT_COPY : ACCOUNT_COPY[kind];
+  // Website accounts and plain account records keep no password; only `secret`
+  // assets (API key / SSH key / token) show their stored secret value.
+  const showSecretValue = kind === "secret" && secretKind !== "password" && Boolean(record?.password);
+  const secretLabel = showSecretValue ? (ACCOUNT_COPY.secret.password ?? "") : "";
 
   useEffect(() => {
     let alive = true;
@@ -68,7 +72,7 @@ export function AccountPanel({ assetId, kind }: { assetId: string; kind: AssetKi
         <Button
           variant="outline"
           size="sm"
-          onClick={() => void requireVault(t("查看已保存的账号密码需要先解锁密钥库。"))}
+          onClick={() => void requireVault(t("查看已保存的账号信息需要先解锁密钥库。"))}
         >
           <Lock className="size-3.5" />
 
@@ -81,7 +85,7 @@ export function AccountPanel({ assetId, kind }: { assetId: string; kind: AssetKi
           <Button variant="outline" size="sm" onClick={() => openComposer(kind, assetId)}>
             <KeyRound className="size-3.5" />
 
-            {t("录入账号密码")}
+            {t("录入账号")}
           </Button>
           <span className="text-2xs text-muted">{t("尚未保存任何账号信息。")}</span>
         </div>
@@ -111,10 +115,10 @@ export function AccountPanel({ assetId, kind }: { assetId: string; kind: AssetKi
             </Row>
           )}
 
-          {record.password && (
-            <Row label={t(copy.password)}>
+          {showSecretValue && (
+            <Row label={t(secretLabel)}>
               <span className="truncate font-mono text-meta">
-                {reveal ? record.password : "•".repeat(Math.min(18, record.password.length))}
+                {reveal ? record.password : "•".repeat(Math.min(18, record.password!.length))}
               </span>
               <IconAction
                 label={reveal ? t("隐藏") : t("显示")}
@@ -122,7 +126,7 @@ export function AccountPanel({ assetId, kind }: { assetId: string; kind: AssetKi
               >
                 {reveal ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
               </IconAction>
-              <CopyAction value={record.password} what={t(copy.password)} />
+              <CopyAction value={record.password!} what={t(secretLabel)} />
             </Row>
           )}
 

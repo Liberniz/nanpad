@@ -123,6 +123,7 @@ export function Overview() {
                 ["ai", "AI 订阅", counts.ai],
                 ["vault", "密钥库", counts.vault],
                 ["certs", "安全证书", counts.certs],
+                ["services", "服务", counts.services],
               ] as const
             )
               .filter(([, , count]) => count > 0)

@@ -5,7 +5,6 @@ import { Markdown } from "./markdown";
 import { AssetDocuments } from "./asset-documents";
 import { Button } from "./ui/button";
 import { useDocuments } from "@/lib/documents";
-import { rawMarkdownContent } from "@/lib/document-migration.mjs";
 import { useAppStore } from "@/lib/store";
 import type { Server } from "@/lib/types";
 import { t } from "@/lib/i18n";
@@ -165,7 +164,7 @@ export function ServerDocsPanel({ server }: { server: Server }) {
       if (template)
         await useDocuments.getState().create([{ kind: "server", id: server.id }], {
           title: server.name + " · " + t(template.label),
-          content: rawMarkdownContent(template.content(server)),
+          content: template.content(server),
         });
       else await useDocuments.getState().importServer(server);
       useAppStore.getState().setExpanded(null);

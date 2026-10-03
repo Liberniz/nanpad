@@ -25,7 +25,7 @@ const VaultWorkspace = lazy(() =>
   import("./vault-workspace").then((module) => ({ default: module.VaultWorkspace })),
 );
 import { useSettings } from "@/lib/settings";
-import { AiCard, CertCard, DomainCard, MailCard, SecretCard, ServerCard } from "./asset-card";
+import { AiCard, CertCard, DomainCard, MailCard, SecretCard, ServerCard, ServiceCard } from "./asset-card";
 const AgentView = lazy(() =>
   import("./agent-view").then((module) => ({ default: module.AgentView })),
 );
@@ -74,7 +74,7 @@ function ViewBody() {
   if (view === "mail") return <MailWorkspace />;
   if (
     hydrated &&
-    ["servers", "domains", "ai", "certs", "tags"].includes(view) &&
+    ["servers", "domains", "ai", "certs", "services", "tags"].includes(view) &&
     layout !== "cards"
   )
     return <AssetWorkspace />;
@@ -99,6 +99,8 @@ function ViewBody() {
       return <VaultWorkspace />;
     case "certs":
       return <CertsView />;
+    case "services":
+      return <ServicesView />;
     case "tags":
       return <TagsView />;
     case "agent":
@@ -130,7 +132,7 @@ export function TopTabs() {
           </Button>
         )}
       </div>
-      {["servers", "domains", "ai", "certs", "tags", "vault", "mail"].includes(view) && (
+      {["servers", "domains", "ai", "certs", "services", "tags", "vault", "mail"].includes(view) && (
         <ListHeader />
       )}
     </div>
@@ -257,6 +259,7 @@ const PROBE_KIND: Record<ViewId, ProbeKind | null> = {
   ai: null,
   vault: null,
   certs: "cert",
+  services: "service",
   tags: null,
   agent: null,
   terminal: "server",
@@ -274,6 +277,7 @@ const BADGE_KEY: Record<ViewId, keyof ReturnType<typeof attentionOf>> = {
   ai: "ai",
   vault: "vault",
   certs: "certs",
+  services: "services",
   tags: "total",
   agent: "total",
   terminal: "servers",
@@ -288,6 +292,7 @@ const TITLE: Record<string, { all: string; attention: string }> = {
   ai: { all: "全部订阅", attention: "用量告警" },
   vault: { all: "全部密钥", attention: "待轮换" },
   certs: { all: "全部证书", attention: "即将到期" },
+  services: { all: "全部服务", attention: "检测异常" },
   tags: { all: "全部分组", attention: "需处理" },
   agent: { all: "问答", attention: "需处理" },
   terminal: { all: "会话", attention: "离线主机" },
@@ -447,6 +452,24 @@ function CertsView() {
   );
 }
 
+function ServicesView() {
+  const list = useAppStore((s) => s.services);
+  const items = useListFilter(list, (s) => [
+    s.name,
+    s.url,
+    s.provider,
+    s.expectedKeyword ?? "",
+    tagsOf(s).join(" "),
+  ]);
+  return (
+    <AssetList
+      items={items}
+      empty={t("还没有服务。点右上角「添加资产」把 Worker、博客或自建服务记进来。")}
+      render={(s) => <ServiceCard key={s.id} data={s} />}
+    />
+  );
+}
+
 /**
  * The cross-kind lens on tags.
  *
@@ -462,6 +485,7 @@ function TagsView() {
   const aiAssets = useAppStore((s) => s.aiAssets);
   const secrets = useAppStore((s) => s.secrets);
   const certs = useAppStore((s) => s.certs);
+  const services = useAppStore((s) => s.services);
   const selected = useAppStore((s) => s.tagFilter);
   const query = useAppStore((s) => s.query);
   const filter = useAppStore((s) => s.filter);
@@ -484,8 +508,9 @@ function TagsView() {
       aiAssets: only(aiAssets),
       secrets: only(secrets),
       certs: only(certs),
+      services: only(services),
     };
-  }, [filter, servers, domains, mailboxes, aiAssets, secrets, certs]);
+  }, [filter, servers, domains, mailboxes, aiAssets, secrets, certs, services]);
 
   // Derived in a memo, not in a selector: a selector runs on every store read
   // and a fresh array never compares equal.
@@ -548,6 +573,7 @@ function TagsView() {
       { kind: "ai", items: keep(scope.aiAssets).map((s) => <AiCard key={s.id} data={s} />) },
       { kind: "secret", items: keep(scope.secrets).map((s) => <SecretCard key={s.id} data={s} />) },
       { kind: "cert", items: keep(scope.certs).map((s) => <CertCard key={s.id} data={s} />) },
+      { kind: "service", items: keep(scope.services).map((s) => <ServiceCard key={s.id} data={s} />) },
     ] as Array<{ kind: AssetKind; items: ReactNode[] }>
   ).filter((section) => section.items.length > 0);
 

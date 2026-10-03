@@ -2,6 +2,7 @@ import { hasServerMetrics, hasServerObservation } from "@/lib/server-observation
 import type { MouseEvent } from "react";
 import {
   CircleAlert,
+  Cloud,
   Copy,
   Globe,
   KeyRound,
@@ -29,6 +30,7 @@ import type {
   Mailbox,
   Secret,
   Server as ServerT,
+  ServiceAsset,
 } from "@/lib/types";
 import { cn, copyText, daysUntil, formatDate, formatUsd } from "@/lib/utils";
 import { t } from "@/lib/i18n";
@@ -591,6 +593,69 @@ export function CertCard({ data, compact = true }: { data: Certificate; compact?
           <p className="mt-2 text-meta text-muted">{data.notes}</p>
         </div>
       )}
+    </article>
+  );
+}
+
+export const SERVICE_TYPE_LABEL: Record<ServiceAsset["serviceType"], string> = {
+  worker: "Cloudflare Worker",
+  blog: "博客",
+  mail: "邮箱服务",
+  other: "其他",
+};
+
+export function ServiceCard({ data, compact = true }: { data: ServiceAsset; compact?: boolean }) {
+  return (
+    <article
+      className={cn(
+        "group relative bg-card text-left transition-all",
+        compact
+          ? "asset-card-valuable card-tap cursor-pointer"
+          : "asset-card-valuable rounded-2xl shadow-float",
+      )}
+      data-asset-id={compact ? data.id : undefined}
+      onClick={compact ? (e) => openFromEvent(e, "service", data.id) : undefined}
+    >
+      <header className="flex items-start gap-3">
+        <AssetImage
+          value={data.imageDataUrl}
+          fallback={
+            <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-surface text-ink border border-line-strong/60">
+              <Cloud className="size-4.5" />
+            </div>
+          }
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="truncate font-semibold tracking-tight text-ink">{data.name}</h3>
+            <StatusBadge status={data.status} sonar={data.status === "online"} />
+          </div>
+          <p className="mt-0.5 truncate text-meta text-muted">
+            {t(SERVICE_TYPE_LABEL[data.serviceType])}
+            {data.provider ? ` · ${data.provider}` : ""}
+          </p>
+        </div>
+      </header>
+      <p className="mt-2.5 truncate text-meta font-mono text-muted">{data.url}</p>
+      <div className="mt-3 flex items-center justify-between text-meta text-muted">
+        <span className="text-2xs">
+          {data.httpStatus != null ? `HTTP ${data.httpStatus}` : t("尚未检测")}
+          {data.responseMs != null ? ` · ${data.responseMs} ms` : ""}
+        </span>
+        {data.checkMethod === "keyword" && data.expectedKeyword && (
+          <span className="code-text text-[11px]">{t("关键词：{0}", data.expectedKeyword)}</span>
+        )}
+      </div>
+      {data.lastCheckedAt && (
+        <p className="mt-1 text-2xs text-subtle">
+          {t("上次检测")} <TimeAgo iso={data.lastCheckedAt} />
+        </p>
+      )}
+      <div className="mt-3.5 border-t border-line/60 pt-2.5">
+        <TagRow tags={tagsOf(data)} />
+      </div>
+      <ProbeNote id={data.id} error={data.probeError} at={data.probedAt} />
+      {!compact && data.notes && <p className="mt-2 text-meta text-muted">{data.notes}</p>}
     </article>
   );
 }

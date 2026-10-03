@@ -2,22 +2,9 @@ import { hostedImageUrl } from "./hosted-image.mjs";
 import { mkdir, readFile, readdir, writeFile, rename, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { inspectRaster } from "./image-data.mjs";
+import { legacyJsonToMarkdown } from "../../src/lib/tiptap-to-markdown.mjs";
 
 const KINDS = new Set(["server", "domain", "mail", "ai", "secret", "cert"]);
-const TYPES = new Set([
-  "doc",
-  "paragraph",
-  "heading",
-  "text",
-  "bulletList",
-  "orderedList",
-  "listItem",
-  "blockquote",
-  "codeBlock",
-  "hardBreak",
-  "horizontalRule",
-  "image",
-]);
 export function documentLink(value) {
   try {
     const url = new URL(value);
@@ -28,59 +15,51 @@ export function documentLink(value) {
     return null;
   }
 }
+/** Fenced code blocks and inline code are literal text, not links/images. */
+function stripCode(markdown) {
+  return markdown
+    .replace(/```[\s\S]*?(```|$)/g, "")
+    .replace(/`[^`\n]*`/g, "");
+}
+const IMAGE_PATTERN = /!\[[^\]\n]*\]\(\s*([^\s)]+)(?:\s+"[^"]*")?\s*\)/g;
+/** [text](target) — but not ![alt](src). Only absolute-URL-looking targets are checked. */
+const LINK_PATTERN = /(?<!!)\[[^\]\n]*\]\(\s*([^\s)]+)(?:\s+"[^"]*")?\s*\)/g;
+function looksAbsoluteUrl(target) {
+  return /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(target) || target.startsWith("//");
+}
+function checkImageSrc(src) {
+  const match =
+    typeof src === "string" && /^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/]+={0,2})$/.exec(src);
+  if (match) {
+    const bytes = Buffer.from(match[2], "base64");
+    if (bytes.length > 2 * 1024 * 1024 || bytes.toString("base64") !== match[2])
+      throw new Error("图片编码无效或超过 2 MiB");
+    const size = inspectRaster(bytes, "image/" + match[1]);
+    if (Math.max(size.width, size.height) > 2048) throw new Error("图片最长边不能超过 2048 像素");
+    return;
+  }
+  if (!hostedImageUrl(src)) throw new Error("图片必须是上传图片或 HTTPS 图床地址，不支持 SVG");
+}
 export function normalizeDocument(input) {
   if (!input || typeof input !== "object" || !/^doc-[a-zA-Z0-9-]{1,80}$/.test(input.id))
     throw new Error("文档标识无效");
   if (JSON.stringify(input).length > 16 * 1024 * 1024) throw new Error("单篇文档不能超过 16 MiB");
-  let count = 0;
-  const walk = (node, depth = 0) => {
-    if (++count > 20000 || depth > 24 || !node || !TYPES.has(node.type))
-      throw new Error("文档结构无效或内容过长");
-    const out = { type: node.type };
-    if (node.type === "text") {
-      if (typeof node.text !== "string") throw new Error("文本无效");
-      out.text = node.text;
-    }
-    if (node.type === "heading")
-      out.attrs = { level: [1, 2, 3].includes(node.attrs?.level) ? node.attrs.level : 2 };
-    if (node.type === "orderedList")
-      out.attrs = {
-        start:
-          Number.isSafeInteger(node.attrs?.start) && node.attrs.start > 0 ? node.attrs.start : 1,
-      };
-    if (node.type === "image") {
-      const src = node.attrs?.src;
-      const match =
-        typeof src === "string" &&
-        /^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/]+={0,2})$/.exec(src);
-      if (!match && !hostedImageUrl(src))
-        throw new Error("图片必须是上传图片或 HTTPS 图床地址，不支持 SVG");
-      if (match) {
-        const bytes = Buffer.from(match[2], "base64");
-        if (bytes.length > 2 * 1024 * 1024 || bytes.toString("base64") !== match[2])
-          throw new Error("图片编码无效或超过 2 MiB");
-        const size = inspectRaster(bytes, "image/" + match[1]);
-        if (Math.max(size.width, size.height) > 2048)
-          throw new Error("图片最长边不能超过 2048 像素");
-      }
-      out.attrs = { src, alt: String(node.attrs?.alt ?? "图片").slice(0, 300) };
-    }
-    if (Array.isArray(node.marks))
-      out.marks = node.marks.map((mark) => {
-        if (["bold", "italic", "strike", "underline", "code"].includes(mark.type))
-          return { type: mark.type };
-        if (mark.type === "link") {
-          const href = documentLink(mark.attrs?.href);
-          if (!href) throw new Error("链接只支持 HTTP 或 HTTPS");
-          return { type: "link", attrs: { href, target: "_blank", rel: "noopener noreferrer" } };
-        }
-        throw new Error("不支持的文本格式");
-      });
-    if (Array.isArray(node.content))
-      out.content = node.content.map((child) => walk(child, depth + 1));
-    return out;
-  };
-  if (input.content?.type !== "doc") throw new Error("缺少文档正文");
+  // Old tiptap JSON bodies are migrated to Markdown on the way in, so a
+  // document written by an older build keeps working without a separate step.
+  let content = input.content;
+  if (typeof content !== "string") {
+    const migrated = legacyJsonToMarkdown(content, input.id);
+    if (migrated === null) throw new Error("文档正文必须是 Markdown 文本");
+    content = migrated;
+  }
+  // Validate embedded images and absolute links, ignoring code spans/blocks.
+  const text = stripCode(content);
+  for (const match of text.matchAll(IMAGE_PATTERN)) checkImageSrc(match[1]);
+  for (const match of text.matchAll(LINK_PATTERN)) {
+    const target = match[1];
+    if (looksAbsoluteUrl(target) && !documentLink(target))
+      throw new Error("链接只支持 HTTP 或 HTTPS");
+  }
   const seen = new Set();
   const bindings = (Array.isArray(input.bindings) ? input.bindings : [])
     .map((ref) => {
@@ -101,26 +80,27 @@ export function normalizeDocument(input) {
       String(input.title ?? "")
         .trim()
         .slice(0, 160) || "未命名文档",
-    content: walk(input.content),
+    content,
     bindings,
   };
 }
 export function documentSummary(doc) {
-  const text = [];
-  let imageCount = 0;
-  const walk = (node) => {
-    if (node.text) text.push(node.text);
-    if (node.type === "image") imageCount++;
-    for (const child of node.content ?? []) walk(child);
-  };
-  walk(doc.content);
+  const markdown = typeof doc.content === "string" ? doc.content : "";
+  const imageCount = (markdown.match(/!\[[^\]\n]*\]\(\s*[^\s)]+/g) ?? []).length;
+  const excerpt = stripCode(markdown)
+    .replace(/!\[[^\]\n]*\]\(\s*[^\s)]+(?:\s+"[^"]*")?\s*\)/g, "")
+    .replace(/\[([^\]\n]*)\]\(\s*[^\s)]+(?:\s+"[^"]*")?\s*\)/g, "$1")
+    .replace(/[#>*_~`|\-[\]()!]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 180);
   return {
     id: doc.id,
     title: doc.title,
     bindings: doc.bindings,
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
-    excerpt: text.join(" ").slice(0, 180),
+    excerpt,
     imageCount,
   };
 }

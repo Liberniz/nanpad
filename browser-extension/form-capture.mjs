@@ -73,22 +73,16 @@ export function collectLoginForms() {
         b.score - a.score || Math.abs(a.index - passwordIndex) - Math.abs(b.index - passwordIndex),
     );
     const rawUsername = fallback[0]?.input.value.trim() || "";
-    const oversized = rawUsername.length > 320 || password.value.length > 4096;
+    // 只采集账号，不采集密码：密码由密码管理器保管。
+    const oversized = rawUsername.length > 320;
     const username = rawUsername.length <= 320 ? rawUsername : "";
-    const value = password.value.length <= 4096 ? password.value : "";
     const confirmation = /confirm|repeat|retype|确认|再次|重复/.test(description(password));
     if (confirmation && results.some((item) => item.group === group && item.username === username))
       continue;
-    if (
-      results.some(
-        (item) => item.group === group && item.username === username && item.password === value,
-      )
-    )
-      continue;
+    if (results.some((item) => item.group === group && item.username === username)) continue;
     results.push({
       group,
       username,
-      password: value,
       oversized,
       kind: password.autocomplete.toLowerCase().split(/\s+/).includes("new-password")
         ? "new"
@@ -101,13 +95,12 @@ export function collectLoginForms() {
       if (field.value.trim().length > 320) continue;
       const username = field.value.trim();
       if (!results.some((item) => item.username === username))
-        results.push({ username, password: "", kind: "account" });
+        results.push({ username, kind: "account" });
       if (results.length === 8) break;
     }
   }
-  return results.map(({ username, password, kind, oversized }) => ({
+  return results.map(({ username, kind, oversized }) => ({
     username,
-    password,
     kind,
     ...(oversized ? { oversized: true } : {}),
   }));
