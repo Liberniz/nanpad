@@ -32,6 +32,9 @@ const appManifest = {
   description: manifest.description,
   author: manifest.author,
   homepage: manifest.homepage,
+  // electron-builder 在暂存目录（无 .git）里检测不到仓库地址会直接报错，
+  // 把仓库声明透传过去（publish 仍由命令行 --publish never 控制）。
+  repository: manifest.repository,
   type: "module",
   main: "electron/main.mjs",
   dependencies,
