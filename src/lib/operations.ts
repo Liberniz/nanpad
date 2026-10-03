@@ -55,6 +55,7 @@ export function assetEntries(s: Snapshot): AssetEntry[] {
     ...s.aiAssets.map((x) => ({ kind: "ai" as const, id: x.id, label: x.name })),
     ...s.secrets.map((x) => ({ kind: "secret" as const, id: x.id, label: x.name })),
     ...s.certs.map((x) => ({ kind: "cert" as const, id: x.id, label: x.cn })),
+    ...s.services.map((x) => ({ kind: "service" as const, id: x.id, label: x.name })),
   ];
 }
 

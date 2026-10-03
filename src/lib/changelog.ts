@@ -13,6 +13,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "1.2.1",
+    date: "2026-10-03",
+    title: "服务资产关联修复",
+    changes: [
+      "修复服务资产无法关联其他资产的问题：关联资产、资产整理、文档绑定三个入口现在都能选到服务；之前漏掉的服务关联不再被数据清洗丢弃。",
+    ],
+  },
+  {
     version: "1.2.0",
     date: "2026-10-03",
     title: "服务资产、WxPusher、Markdown 文档与账号台账",
