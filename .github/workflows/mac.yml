@@ -43,8 +43,9 @@ jobs:
 
       - name: 打包 dmg（Apple Silicon）
         # 必须经由 npm 运行：package-desktop.mjs 要求 npm 注入的 npm_execpath。
-        # desktop:dist 已包含 desktop:build；额外参数透传给 electron-builder。
-        run: npm run desktop:dist -- --mac dmg --arm64 --publish never
+        # desktop:dist 已包含 desktop:build 和 --publish never；额外参数透传给 electron-builder。
+        # 注意不要重复传 --publish：重复 flag 会被解析成数组，导致发布策略失效。
+        run: npm run desktop:dist -- --mac dmg --arm64
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

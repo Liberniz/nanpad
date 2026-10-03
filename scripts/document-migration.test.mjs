@@ -11,7 +11,7 @@ const migration = await import("../src/lib/document-migration.mjs").catch((error
 const server = () => ({
   id: "服务器/旧:id-1",
   name: "生产服务器",
-  docs: "# 维护\r\n\r\n```bash\r\nprintf '$HOME'\r\n```\r\n[资料](https://example.test/a?q=1)\r\n![截图](https://example.test/a.png)\r\n",
+  docs: "# 维护\r\n\r\n```bash\r\nprintf '$HOME'\r\n```\r\n[资料](https://example.test/a?q=1)\r\n![截图](https://zensimagebed.pages.dev/a.png)\r\n",
 });
 function api() {
   assert.equal(typeof migration.migrateServerDocument, "function", "缺少旧文档迁移能力");
@@ -24,8 +24,8 @@ test("旧Markdown、代码、链接和换行原样迁移，ID适配文档存储"
     const original = structuredClone(source);
     const store = new DocumentsStore(directory);
     const result = await api().migrateServerDocument(source, store);
-    assert.equal(result.content.content[0].type, "codeBlock");
-    assert.equal(result.content.content[0].content[0].text, source.docs);
+    // 文档正文即标准 Markdown 源码，不再经富文本 JSON 中转。
+    assert.equal(result.content, source.docs);
     assert.deepEqual(result.bindings, [{ kind: "server", id: source.id }]);
     assert.match(result.id, /^doc-legacy-server-[a-f0-9]{64}$/);
     assert.doesNotThrow(() => normalizeDocument(result));
@@ -43,10 +43,7 @@ test("再次迁移返回现有编辑内容且保留解绑，不重复生成文�
     const edited = await store.save({
       ...first,
       title: "我重新编辑过",
-      content: {
-        type: "doc",
-        content: [{ type: "paragraph", content: [{ type: "text", text: "新内容" }] }],
-      },
+      content: "新内容",
       bindings: [],
     });
     const again = await api().migrateServerDocument(

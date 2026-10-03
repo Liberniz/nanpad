@@ -128,7 +128,7 @@
   "homepage": "https://github.com/Songwo/nanpad",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Songwo/nanpad.git"
+    "url": "https://github.com/Liberniz/nanpad.git"
   },
   "description": "司南 Nanpad — 个人数字资产指挥台",
   "build": {

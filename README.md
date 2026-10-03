@@ -2,13 +2,13 @@
 
 个人数字资产工作台，将主机、域名、邮箱、AI 订阅、号码、密钥和证书集中到一个桌面应用中。资产保存在本机；通过 SSH、DNS、TLS 和服务商 API 读取实际状态，通过你配置的模型进行有来源的问答。
 
-[产品主页](https://songwo.github.io/nanpad/) · [下载安装包](https://github.com/Songwo/nanpad/releases/latest) · [使用教程](docs/USER-GUIDE.md) · [产品介绍](docs/PRODUCT.md) · [AI 服务授权](docs/AI-ACCOUNTS.md) · [模型与本地 RAG](docs/AGENT-RAG.md) · [安全与备份](docs/SECURITY.md) · [更新日志](CHANGELOG.md)
+[产品主页](https://songwo.github.io/nanpad/) · [下载安装包](https://github.com/Liberniz/nanpad/releases/latest) · [使用教程](docs/USER-GUIDE.md) · [产品介绍](docs/PRODUCT.md) · [AI 服务授权](docs/AI-ACCOUNTS.md) · [模型与本地 RAG](docs/AGENT-RAG.md) · [安全与备份](docs/SECURITY.md) · [更新日志](CHANGELOG.md)
 
 [社区友链 · LINUX DO](https://linux.do/) · 真诚、友善、团结、专业。
 
 ![Nanpad 桌面界面](site/overview.png)
 
-喜欢司南的话，欢迎 [Star 本项目](https://github.com/Songwo/nanpad)、提交 Issue 或贡献改进。
+喜欢司南的话，欢迎 [Star 本项目](https://github.com/Liberniz/nanpad)、提交 Issue 或贡献改进。
 
 ## 1.1.0 新增
 
@@ -187,7 +187,7 @@ npm run desktop:dist -- --win --x64 --publish never
 
 ## 社区与交流
 
-司南认可并支持 [LINUX DO](https://linux.do/) 社区倡导的「真诚、友善、团结、专业」。欢迎佬友交流账号、订阅和服务器的管理经验，也欢迎通过 [GitHub Issues](https://github.com/Songwo/nanpad/issues) 反馈使用问题和改进建议。
+司南认可并支持 [LINUX DO](https://linux.do/) 社区倡导的「真诚、友善、团结、专业」。欢迎佬友交流账号、订阅和服务器的管理经验，也欢迎通过 [GitHub Issues](https://github.com/Liberniz/nanpad/issues) 反馈使用问题和改进建议。
 
 社区友链：[LINUX DO](https://linux.do/)。社区开源推广的声明与发帖要求见 [新推广方式：开源推广](https://linux.do/t/topic/1776670)；友链表示对社区的认可，不代表官方认证或合作背书。
 
@@ -199,4 +199,4 @@ npm run desktop:dist -- --win --x64 --publish never
 
 SSH 指标采集面向提供 `/proc` 的 Linux 主机。WHOIS 可能因注册局限制无法返回到期日。OAuth 使用供应商公开客户端及兼容接口，可能因供应商调整失效；账号连接失败会显示错误，不会读取其他应用已有登录数据补救。Gemini 额度查询要求账号已经开通 Code Assist 并能返回项目。服务商订阅结束日期目前没有统一可查询来源，软件不会据令牌有效期推算订阅到期。
 
-问题反馈请提交 [GitHub Issue](https://github.com/Songwo/nanpad/issues)，包含版本、操作步骤与去除敏感信息后的错误。不要提交 API Key、Token、主密码或完整个人数据文件。
+问题反馈请提交 [GitHub Issue](https://github.com/Liberniz/nanpad/issues)，包含版本、操作步骤与去除敏感信息后的错误。不要提交 API Key、Token、主密码或完整个人数据文件。
