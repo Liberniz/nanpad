@@ -44,6 +44,9 @@ await cp(join(root, "electron"), join(stage, "electron"), {
   filter: (source) => !source.endsWith(".test.mjs"),
 });
 await cp(join(root, "dist-desktop"), join(stage, "dist-desktop"), { recursive: true });
+// electron/services/documents.mjs 引用了 electron 目录外的共享模块，
+// 保持相对路径 ../../src/lib 可用。
+await cp(join(root, "src/lib/tiptap-to-markdown.mjs"), join(stage, "src/lib/tiptap-to-markdown.mjs"));
 await writeFile(join(stage, "package.json"), JSON.stringify(appManifest, null, 2));
 // 保留仓库锁定的版本，不在打包时重新解析最新依赖版本。
 lock.packages[""] = appManifest;
