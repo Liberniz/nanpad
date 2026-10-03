@@ -61,6 +61,11 @@ jobs:
         run: |
           version=$(node -p "require('./package.json').version")
           if [ "v$version" != "$GITHUB_REF_NAME" ]; then echo "Version tag mismatch"; exit 1; fi
+          # Windows 任务负责创建 Release；这里等它建好再上传 dmg。
+          for i in $(seq 1 20); do
+            gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 && break
+            sleep 30
+          done
           dmg=$(ls release/v$version/*.dmg | head -1)
           (cd release/v$version && shasum -a 256 "$(basename "$dmg")" > SHA256SUMS-mac.txt)
           gh release upload "$GITHUB_REF_NAME" "$dmg" "release/v$version/SHA256SUMS-mac.txt" --clobber
